@@ -92,3 +92,16 @@ export function canAccessPage(role: string, page: string): boolean {
 export function canOperateInventory(role: string): boolean {
   return role !== "CS";
 }
+
+// Drives the market picker in User Management: ADMIN/PACKING/TECH always
+// serve every market so their user_market_access rows are all 4, fixed;
+// MANAGER gets a multi-select of an assigned subset; CS/STREAMER get exactly
+// one market each.
+export const ROLE_SCOPE: Record<string, "ALL" | "MULTI" | "SINGLE"> = {
+  ADMIN: "ALL",
+  PACKING: "ALL",
+  TECH: "ALL",
+  MANAGER: "MULTI",
+  CS: "SINGLE",
+  STREAMER: "SINGLE",
+};

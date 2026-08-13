@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession, ROLE_PAGES } from "@/lib/auth";
 import LogoutButton from "@/components/LogoutButton";
+import AnnouncementBadge from "@/components/AnnouncementBadge";
 
 const NAV_DEFS: { id: string; label: string; href: string }[] = [
   { id: "dashboard", label: "Executive Dashboard", href: "/dashboard" },
@@ -58,7 +59,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 {session.role} · {session.markets.length === 4 ? "All markets" : session.markets.join("+")}
               </div>
             </div>
-            <LogoutButton />
+            <div className="flex items-center gap-2">
+              <AnnouncementBadge />
+              <LogoutButton />
+            </div>
           </div>
         </div>
       </aside>
