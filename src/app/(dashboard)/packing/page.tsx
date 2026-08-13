@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card, Empty, ModalShell, btnPrimary, btnGhost } from "@/components/ui";
+import { ImeiScanField } from "@/components/ImeiScanner";
 
 type OrderItem = { itemId: string; imeiSerial: string; variantId: string; modelName: string; color: string | null; itemPriceNtd: string; basePriceNtd: string };
 type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; isVerified: boolean; priceNtd: string };
@@ -187,12 +188,31 @@ function PackScanModal({
   order, onClose, onCompleted,
 }: { order: PackingOrder; onClose: () => void; onCompleted: () => void }) {
   const [scanned, setScanned] = useState<Set<string>>(new Set());
+  const [scanErrors, setScanErrors] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const allScanned = order.items.every((i) => scanned.has(i.imeiSerial));
   const allChecked = order.accessories.every((a) => checked.has(a.accessoryRowId));
+
+  // Accepts input from either a hardware scan gun (keyboard emulation, Enter
+  // to submit) or the live camera decoder — both funnel through here and get
+  // validated against the exact IMEI expected for this line item.
+  function handleScan(expectedImei: string, raw: string) {
+    const cleaned = raw.trim();
+    if (cleaned === expectedImei) {
+      setScanned((s) => new Set(s).add(expectedImei));
+      setScanErrors((e) => {
+        if (!(expectedImei in e)) return e;
+        const next = { ...e };
+        delete next[expectedImei];
+        return next;
+      });
+    } else {
+      setScanErrors((e) => ({ ...e, [expectedImei]: `Mã quét được (${cleaned}) không khớp IMEI của đơn hàng.` }));
+    }
+  }
 
   async function complete() {
     setSubmitting(true);
@@ -220,7 +240,7 @@ function PackScanModal({
         const done = scanned.has(it.imeiSerial);
         return (
           <div key={it.imeiSerial} style={{ position: "relative", background: "var(--ink)", color: "#fff", borderRadius: 10, padding: 14, marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontSize: 11, color: "#8891A0" }}>{it.modelName}{it.color ? ` · ${it.color}` : ""}</div>
                 <div className="mono" style={{ fontSize: 16, fontWeight: 600 }}>{it.imeiSerial}</div>
@@ -228,9 +248,14 @@ function PackScanModal({
               {done ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ok)" }}>✓ Matched</span>
               ) : (
-                <button onClick={() => setScanned((s) => new Set(s).add(it.imeiSerial))} style={{ ...btnPrimary, padding: "7px 12px" }}>📷 Simulate scan</button>
+                <div style={{ minWidth: 260, flex: "1 1 260px" }}>
+                  <ImeiScanField onScan={(raw) => handleScan(it.imeiSerial, raw)} />
+                </div>
               )}
             </div>
+            {!done && scanErrors[it.imeiSerial] && (
+              <div style={{ fontSize: 11.5, color: "#FCA5A5", marginTop: 8 }}>{scanErrors[it.imeiSerial]}</div>
+            )}
           </div>
         );
       })}
