@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { orders, productItems } from "@/lib/schema";
-import { sql, inArray, ne } from "drizzle-orm";
+import { sql, inArray, ne, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function DashboardPage() {
     })
     .from(orders)
     .where(
-      sql`${inArray(orders.marketCode, markets)} AND ${ne(orders.shipmentStatus, "CANCELLED")}`
+      and(inArray(orders.marketCode, markets), ne(orders.shipmentStatus, "CANCELLED"))
     );
 
   const byMarket = await db
