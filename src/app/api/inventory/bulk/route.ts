@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
   if (!session || !canAccessPage(session.role, "inventory")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (session.role !== "ADMIN" && session.role !== "PACKING") {
-    return NextResponse.json({ error: "Your role cannot bulk import IMEI stock." }, { status: 403 });
+  if (session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Only Admin can bulk import IMEI stock." }, { status: 403 });
   }
 
   const { csv } = await req.json();

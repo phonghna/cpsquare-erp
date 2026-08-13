@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { announcements } from "@/lib/schema";
 import { getSession, canAccessPage } from "@/lib/auth";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const PRIORITIES = ["NORMAL", "IMPORTANT", "URGENT"];
@@ -16,7 +16,15 @@ export async function GET() {
   }
   const db = getDb();
   const rows = await db.select().from(announcements).orderBy(desc(announcements.createdAt)).limit(200);
-  return NextResponse.json({ announcements: rows });
+
+  const readCountsRaw = await db.execute(sql`
+    SELECT announcement_id, COUNT(*)::int AS n FROM announcement_reads GROUP BY announcement_id
+  `);
+  const readCountRows = (readCountsRaw as any).rows ?? readCountsRaw;
+  const readCountByAnnouncement = new Map(readCountRows.map((r: any) => [r.announcement_id, r.n]));
+
+  const result = rows.map((a) => ({ ...a, readCount: readCountByAnnouncement.get(a.announcementId) || 0 }));
+  return NextResponse.json({ announcements: result });
 }
 
 export async function POST(req: NextRequest) {

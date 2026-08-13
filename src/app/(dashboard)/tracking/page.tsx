@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { StatusPill, SHIPMENT_META } from "@/components/ui";
+import { StatusPill, SHIPMENT_META, Card, Empty, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
 
 type Order = {
   orderId: string;
   orderCode: string;
   marketCode: string;
   customerName: string;
+  customerSocialHandle: string | null;
   carrierService: string;
   trackingNumber: string | null;
   shipmentStatus: string;
@@ -18,6 +19,12 @@ type Order = {
 
 type DateRangeKey = "ALL" | "TODAY" | "7D" | "MONTH" | "CUSTOM";
 
+const CARRIERS = [
+  { code: "711", name: "7-Eleven" },
+  { code: "FAMILY", name: "FamilyMart" },
+  { code: "TCAT", name: "T-Cat" },
+];
+
 export default function TrackingPage() {
   const [awaiting, setAwaiting] = useState<Order[]>([]);
   const [shipped, setShipped] = useState<Order[]>([]);
@@ -26,6 +33,8 @@ export default function TrackingPage() {
   const [range, setRange] = useState<DateRangeKey>("ALL");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [carrierFilter, setCarrierFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -47,8 +56,15 @@ export default function TrackingPage() {
     return (
       o.orderCode.toLowerCase().includes(q) ||
       o.customerName.toLowerCase().includes(q) ||
+      (o.customerSocialHandle || "").toLowerCase().includes(q) ||
       (o.trackingNumber || "").toLowerCase().includes(q)
     );
+  }
+  function matchesCarrier(o: Order) {
+    return carrierFilter === "ALL" || o.carrierService === carrierFilter;
+  }
+  function matchesStatus(o: Order) {
+    return statusFilter === "ALL" || o.shipmentStatus === statusFilter;
   }
 
   function inDateRange(o: Order) {
@@ -57,17 +73,13 @@ export default function TrackingPage() {
     if (!ref) return false;
     const d = new Date(ref);
     const now = new Date();
-    if (range === "TODAY") {
-      return d.toDateString() === now.toDateString();
-    }
+    if (range === "TODAY") return d.toDateString() === now.toDateString();
     if (range === "7D") {
       const cutoff = new Date(now);
       cutoff.setDate(cutoff.getDate() - 7);
       return d >= cutoff && d <= now;
     }
-    if (range === "MONTH") {
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    }
+    if (range === "MONTH") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     if (range === "CUSTOM") {
       if (!customFrom && !customTo) return true;
       const from = customFrom ? new Date(customFrom) : null;
@@ -79,10 +91,13 @@ export default function TrackingPage() {
     return true;
   }
 
-  const filteredAwaiting = useMemo(() => awaiting.filter(matchesSearch), [awaiting, search]);
+  const filteredAwaiting = useMemo(
+    () => awaiting.filter((o) => matchesSearch(o) && matchesCarrier(o) && matchesStatus(o)),
+    [awaiting, search, carrierFilter, statusFilter]
+  );
   const filteredShipped = useMemo(
-    () => shipped.filter((o) => matchesSearch(o) && inDateRange(o)),
-    [shipped, search, range, customFrom, customTo]
+    () => shipped.filter((o) => matchesSearch(o) && matchesCarrier(o) && matchesStatus(o) && inDateRange(o)).slice(0, 20),
+    [shipped, search, range, customFrom, customTo, carrierFilter, statusFilter]
   );
 
   async function saveTracking(orderId: string) {
@@ -121,138 +136,113 @@ export default function TrackingPage() {
     load();
   }
 
-  const RANGE_OPTIONS: { key: DateRangeKey; label: string }[] = [
-    { key: "ALL", label: "All" },
-    { key: "TODAY", label: "Today" },
-    { key: "7D", label: "7 days" },
-    { key: "MONTH", label: "This month" },
-    { key: "CUSTOM", label: "Custom" },
-  ];
-
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-disp text-2xl font-bold">Shipment Tracking</h1>
-        <p className="text-sm text-slate-500 mt-1">Assign tracking numbers and confirm deliveries.</p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search order code, tracking #, or customer…"
-          className="flex-1 min-w-[240px] px-3 py-2 rounded-lg border border-slate-200 text-sm"
-        />
-        <div className="flex gap-1">
-          {RANGE_OPTIONS.map((r) => (
-            <button
-              key={r.key}
-              onClick={() => setRange(r.key)}
-              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border ${
-                range === r.key ? "bg-accent text-white border-accent" : "border-slate-200 text-slate-600"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
+      <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="disp text-2xl font-bold">Shipment Tracking</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Universal search, date-range filters, and bulk or manual tracking-number updates.</p>
         </div>
-        {range === "CUSTOM" && (
-          <div className="flex items-center gap-1.5">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="px-2 py-1.5 rounded-md border border-slate-200 text-xs" />
-            <span className="text-xs text-slate-400">to</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="px-2 py-1.5 rounded-md border border-slate-200 text-xs" />
-          </div>
-        )}
+        <button onClick={bulkAssign} disabled={bulkBusy} style={{ ...btnPrimary, opacity: bulkBusy ? 0.6 : 1 }}>
+          {bulkBusy ? "Importing…" : "⭱ Simulate bulk tracking import"}
+        </button>
       </div>
 
-      {error && <div className="text-sm text-danger mb-3">{error}</div>}
+      <Card style={{ padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input placeholder="Search tracking #, order code, or customer/handle..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }} />
+          <select value={range} onChange={(e) => setRange(e.target.value as DateRangeKey)} style={{ ...inputStyle, maxWidth: 160 }}>
+            <option value="ALL">All time</option>
+            <option value="TODAY">Today</option>
+            <option value="7D">Last 7 days</option>
+            <option value="MONTH">This month</option>
+            <option value="CUSTOM">Custom range</option>
+          </select>
+          {range === "CUSTOM" && (
+            <>
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} style={{ ...inputStyle, maxWidth: 150 }} />
+              <span style={{ color: "var(--text-faint)" }}>→</span>
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} style={{ ...inputStyle, maxWidth: 150 }} />
+            </>
+          )}
+          <select value={carrierFilter} onChange={(e) => setCarrierFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 160 }}>
+            <option value="ALL">All carriers</option>
+            {CARRIERS.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 180 }}>
+            <option value="ALL">All statuses</option>
+            {Object.keys(SHIPMENT_META).map((s) => <option key={s} value={s}>{SHIPMENT_META[s].label}</option>)}
+          </select>
+        </div>
+      </Card>
+
+      {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
       {loading ? (
-        <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
       ) : (
-        <div className="space-y-8">
-          <section>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-disp font-bold text-sm">Awaiting Tracking Number ({filteredAwaiting.length})</h2>
-              <button
-                onClick={bulkAssign}
-                disabled={bulkBusy || filteredAwaiting.length === 0}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold disabled:opacity-40"
-              >
-                {bulkBusy ? "Importing…" : "Bulk import tracking numbers"}
-              </button>
+        <>
+          <Card style={{ padding: 0, overflow: "hidden", marginBottom: 18 }}>
+            <div style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid var(--border)" }}>
+              Awaiting tracking number ({filteredAwaiting.length})
             </div>
-            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              {filteredAwaiting.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">Nothing awaiting a tracking number.</div>
-              ) : (
-                <table className="w-full text-sm">
+            {filteredAwaiting.length === 0 ? (
+              <Empty title="Nothing to track yet" />
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
                   <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                      <th className="p-3">Order Code</th><th className="p-3">Market</th><th className="p-3">Customer</th>
-                      <th className="p-3">Carrier</th><th className="p-3">Tracking #</th><th className="p-3"></th>
-                    </tr>
+                    <tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Carrier</th><th style={th}>Tracking number</th><th style={th}></th></tr>
                   </thead>
                   <tbody>
                     {filteredAwaiting.map((o) => (
-                      <tr key={o.orderId} className="border-b border-slate-100">
-                        <td className="p-3 font-mono font-bold">{o.orderCode}</td>
-                        <td className="p-3">{o.marketCode}</td>
-                        <td className="p-3">{o.customerName}</td>
-                        <td className="p-3">{o.carrierService}</td>
-                        <td className="p-3">
+                      <tr key={o.orderId}>
+                        <td style={td} className="mono">{o.orderCode}</td>
+                        <td style={td}>{o.customerName}</td>
+                        <td style={td}>{CARRIERS.find((c) => c.code === o.carrierService)?.name || o.carrierService}</td>
+                        <td style={td}>
                           <input
+                            placeholder="Scan or type..."
                             value={trackingInputs[o.orderId] ?? ""}
                             onChange={(e) => setTrackingInputs((s) => ({ ...s, [o.orderId]: e.target.value }))}
-                            placeholder="TRK123456"
-                            className="px-2 py-1 rounded-md border border-slate-200 text-xs font-mono w-32"
+                            style={{ ...inputStyle, maxWidth: 180 }}
                           />
                         </td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => saveTracking(o.orderId)}
-                            disabled={rowBusy === o.orderId || !(trackingInputs[o.orderId] || "").trim()}
-                            className="px-2.5 py-1 rounded-md bg-accent text-white text-xs font-semibold disabled:opacity-40"
-                          >
-                            {rowBusy === o.orderId ? "…" : "Save"}
+                        <td style={td}>
+                          <button onClick={() => saveTracking(o.orderId)} disabled={rowBusy === o.orderId || !(trackingInputs[o.orderId] || "").trim()} style={{ ...btnGhost, opacity: rowBusy === o.orderId ? 0.5 : 1 }}>
+                            {rowBusy === o.orderId ? "…" : "Save → SHIPPED"}
                           </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-          </section>
+              </div>
+            )}
+          </Card>
 
-          <section>
-            <h2 className="font-disp font-bold text-sm mb-2">Shipped / Delivered ({filteredShipped.length})</h2>
-            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              {filteredShipped.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">No results.</div>
-              ) : (
-                <table className="w-full text-sm">
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid var(--border)" }}>
+              Shipped / Delivered / Other ({filteredShipped.length})
+            </div>
+            {filteredShipped.length === 0 ? (
+              <Empty title="No matching orders" />
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
                   <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                      <th className="p-3">Order Code</th><th className="p-3">Customer</th><th className="p-3">Tracking #</th>
-                      <th className="p-3">Shipped</th><th className="p-3">Status</th><th className="p-3"></th>
-                    </tr>
+                    <tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Tracking #</th><th style={th}>Status</th><th style={th}></th></tr>
                   </thead>
                   <tbody>
                     {filteredShipped.map((o) => (
-                      <tr key={o.orderId} className="border-b border-slate-100">
-                        <td className="p-3 font-mono font-bold">{o.orderCode}</td>
-                        <td className="p-3">{o.customerName}</td>
-                        <td className="p-3 font-mono">{o.trackingNumber || "—"}</td>
-                        <td className="p-3 text-slate-500">{o.shippedAt ? new Date(o.shippedAt).toLocaleDateString() : "—"}</td>
-                        <td className="p-3"><StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} /></td>
-                        <td className="p-3">
+                      <tr key={o.orderId}>
+                        <td style={td} className="mono">{o.orderCode}</td>
+                        <td style={td}>{o.customerName} <span style={{ color: "var(--text-faint)" }}>({o.customerSocialHandle})</span></td>
+                        <td style={td} className="mono">{o.trackingNumber || "—"}</td>
+                        <td style={td}><StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} /></td>
+                        <td style={td}>
                           {o.shipmentStatus === "SHIPPED" && (
-                            <button
-                              onClick={() => markDelivered(o.orderId)}
-                              disabled={rowBusy === o.orderId}
-                              className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold disabled:opacity-40"
-                            >
+                            <button onClick={() => markDelivered(o.orderId)} disabled={rowBusy === o.orderId} style={{ ...btnGhost, opacity: rowBusy === o.orderId ? 0.5 : 1 }}>
                               {rowBusy === o.orderId ? "…" : "Mark delivered"}
                             </button>
                           )}
@@ -261,10 +251,10 @@ export default function TrackingPage() {
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-          </section>
-        </div>
+              </div>
+            )}
+          </Card>
+        </>
       )}
     </div>
   );

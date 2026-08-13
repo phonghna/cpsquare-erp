@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { productVariants } from "@/lib/schema";
 import { getSession, canAccessPage } from "@/lib/auth";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
   const session = await getSession();
@@ -15,7 +15,26 @@ export async function GET() {
     .from(productVariants)
     .where(eq(productVariants.isSerialized, true))
     .orderBy(productVariants.modelGroup);
-  return NextResponse.json({ variants: rows, canEdit: session.role === "ADMIN" });
+
+  const logRows = await db.execute(sql`
+    SELECT l.log_id, l.variant_id, l.order_id, l.note, l.created_at, u.display_name AS approved_by, o.order_code
+    FROM price_change_logs l
+    JOIN app_users u ON u.user_id = l.approved_by_user_id
+    LEFT JOIN orders o ON o.order_id = l.order_id
+    ORDER BY l.created_at DESC
+    LIMIT 200
+  `);
+  const priceLogsRaw = (logRows as any).rows ?? logRows;
+  const priceLogs = priceLogsRaw.map((l: any) => ({
+    logId: l.log_id,
+    variantId: l.variant_id,
+    orderCode: l.order_code,
+    approvedBy: l.approved_by,
+    note: l.note,
+    createdAt: l.created_at,
+  }));
+
+  return NextResponse.json({ variants: rows, canEdit: session.role === "ADMIN", priceLogs });
 }
 
 // Admin-only: on-the-fly creation of a new serialized product variant.
@@ -29,17 +48,22 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { sku, brand, modelGroup, storage, color, price } = body;
-  if (!sku || !modelGroup || price === undefined || price === null) {
-    return NextResponse.json({ error: "SKU, model, and price are required." }, { status: 400 });
+  let { sku, brand, modelGroup, storage, color, price } = body;
+  if (!modelGroup || price === undefined || price === null) {
+    return NextResponse.json({ error: "Model and price are required." }, { status: 400 });
   }
 
   const db = getDb();
-  const existing = await db
-    .select({ variantId: productVariants.variantId })
-    .from(productVariants)
-    .where(eq(productVariants.variantId, sku));
-  if (existing.length > 0) {
+  const existingSkus = await db.select({ variantId: productVariants.variantId }).from(productVariants);
+  const skuSet = new Set(existingSkus.map((v) => v.variantId));
+
+  if (!sku) {
+    const base = `${brand || ""}-${modelGroup}-${storage || ""}-${color || ""}`
+      .toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/(^-+|-+$)/g, "");
+    sku = base || `SKU-${Date.now()}`;
+    let n = 1;
+    while (skuSet.has(sku)) { n++; sku = `${base}-${n}`; }
+  } else if (skuSet.has(sku)) {
     return NextResponse.json({ error: `SKU "${sku}" already exists.` }, { status: 409 });
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { StatusPill, PRIORITY_META } from "@/components/ui";
+import { StatusPill, PRIORITY_META, Card, Empty, Field, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
 
 type Announcement = {
   announcementId: string;
@@ -13,17 +13,59 @@ type Announcement = {
   expirationDatetime: string;
   isActive: boolean;
   createdAt: string;
+  readCount: number;
 };
 
-const MARKETS = ["VN", "ID", "TH", "PH"];
-const PRIORITIES = ["NORMAL", "IMPORTANT", "URGENT"];
+const MARKETS = [
+  { code: "VN", name: "Vietnam" },
+  { code: "ID", name: "Indonesia" },
+  { code: "TH", name: "Thailand" },
+  { code: "PH", name: "Philippines" },
+];
+const PRIORITIES = [
+  { code: "URGENT", label: "Urgent" },
+  { code: "IMPORTANT", label: "Important" },
+  { code: "NORMAL", label: "Normal" },
+];
+
+const STATUS_STYLES: Record<string, { label: string; color: string; bg: string }> = {
+  Scheduled: { label: "Scheduled", color: "var(--info)", bg: "var(--info-bg)" },
+  Active: { label: "Active", color: "var(--ok)", bg: "var(--ok-bg)" },
+  Expired: { label: "Expired", color: "var(--text-faint)", bg: "var(--gray-bg)" },
+  Deleted: { label: "Deleted", color: "var(--danger)", bg: "var(--danger-bg)" },
+};
+
+function toDatetimeLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function statusOf(a: Announcement) {
+  const now = new Date();
+  if (!a.isActive) return "Deleted";
+  if (now < new Date(a.startDatetime)) return "Scheduled";
+  if (now > new Date(a.expirationDatetime)) return "Expired";
+  return "Active";
+}
 
 export default function AnnouncementsPage() {
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [priority, setPriority] = useState("URGENT");
+  const [allMarkets, setAllMarkets] = useState(true);
+  const [targets, setTargets] = useState<string[]>([]);
+  const [startAt, setStartAt] = useState(() => toDatetimeLocal(new Date()));
+  const [expireAt, setExpireAt] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return toDatetimeLocal(d);
+  });
+  const [sending, setSending] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -34,6 +76,27 @@ export default function AnnouncementsPage() {
   }
   useEffect(() => { load(); }, []);
 
+  function toggleTarget(code: string) {
+    setTargets((prev) => (prev.includes(code) ? prev.filter((t) => t !== code) : [...prev, code]));
+  }
+
+  async function send() {
+    if (!title.trim() || !message.trim()) return;
+    setSending(true);
+    setError("");
+    const targetMarkets = allMarkets ? "ALL" : (targets.length ? targets.join(",") : "ALL");
+    const res = await fetch("/api/announcements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title.trim(), content: message.trim(), priority, targetMarkets, startDatetime: startAt, expirationDatetime: expireAt }),
+    });
+    const data = await res.json();
+    setSending(false);
+    if (!res.ok) { setError(data.error || "Failed to create announcement."); return; }
+    setTitle(""); setMessage(""); setAllMarkets(true); setTargets([]);
+    load();
+  }
+
   async function remove(id: string) {
     setBusyId(id);
     await fetch(`/api/announcements/${id}/delete`, { method: "POST" });
@@ -43,160 +106,99 @@ export default function AnnouncementsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-6">
-        <div>
-          <h1 className="font-disp text-2xl font-bold">Announcements</h1>
-          <p className="text-sm text-slate-500 mt-1">Sent to the header badge for staff in the target market(s).</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-lg bg-accent text-white font-semibold text-sm">
-          + New Announcement
-        </button>
+      <div className="mb-5">
+        <h1 className="disp text-2xl font-bold">Announcements</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Admin-only. Active announcements blink on the header next to Order data scope for targeted markets, within the scheduled window.</p>
       </div>
 
-      {error && <div className="text-sm text-danger mb-3">{error}</div>}
-
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="p-10 text-center text-slate-400 text-sm">No announcements yet.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                <th className="p-3">Title</th><th className="p-3">Priority</th><th className="p-3">Markets</th>
-                <th className="p-3">Window</th><th className="p-3">Status</th><th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((a) => (
-                <tr key={a.announcementId} className="border-b border-slate-100">
-                  <td className="p-3 font-semibold">{a.title}</td>
-                  <td className="p-3"><StatusPill status={a.priority} meta={PRIORITY_META} /></td>
-                  <td className="p-3">{a.targetMarkets}</td>
-                  <td className="p-3 text-slate-500 text-xs">
-                    {new Date(a.startDatetime).toLocaleString()} → {new Date(a.expirationDatetime).toLocaleString()}
-                  </td>
-                  <td className="p-3">{a.isActive ? "Active" : "Deleted"}</td>
-                  <td className="p-3">
-                    {a.isActive && (
-                      <button
-                        onClick={() => remove(a.announcementId)}
-                        disabled={busyId === a.announcementId}
-                        className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold text-danger disabled:opacity-40"
-                      >
-                        {busyId === a.announcementId ? "…" : "Delete"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
+      <Card style={{ padding: 20, maxWidth: 640, marginBottom: 24 }}>
+        <Field label="Title"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. New T-Cat export format live" style={inputStyle} /></Field>
+        <div style={{ height: 12 }} />
+        <Field label="Message"><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} style={{ ...inputStyle, resize: "vertical" }} /></Field>
+        <div style={{ height: 12 }} />
+        <Field label="Priority">
+          <div style={{ display: "flex", gap: 8 }}>
+            {PRIORITIES.map((p) => {
+              const meta = PRIORITY_META[p.code];
+              const active = priority === p.code;
+              return (
+                <button
+                  key={p.code}
+                  onClick={() => setPriority(p.code)}
+                  style={{
+                    padding: "7px 14px", borderRadius: 8, border: active ? `2px solid ${meta.color}` : "1px solid var(--border)",
+                    background: active ? meta.bg : "#fff", color: active ? meta.color : "var(--text-dim)", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+          <Field label="Start datetime"><input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} style={inputStyle} /></Field>
+          <Field label="Expiration datetime"><input type="datetime-local" value={expireAt} onChange={(e) => setExpireAt(e.target.value)} style={inputStyle} /></Field>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 8 }}>
+            <input type="checkbox" checked={allMarkets} onChange={(e) => setAllMarkets(e.target.checked)} /> Send to All Markets
+          </label>
+          {!allMarkets && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {MARKETS.map((m) => (
+                <label key={m.code} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 11px", borderRadius: 8, border: "1px solid var(--border)", fontSize: 12.5, background: targets.includes(m.code) ? "var(--accent-bg)" : "#fff" }}>
+                  <input type="checkbox" checked={targets.includes(m.code)} onChange={() => toggleTarget(m.code)} /> {m.name}
+                </label>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+        </div>
+        {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 12 }}>{error}</div>}
+        <button onClick={send} disabled={sending || !title.trim() || !message.trim()} style={{ ...btnPrimary, width: "100%", marginTop: 16, opacity: sending ? 0.6 : 1 }}>
+          {sending ? "Scheduling…" : "📣 Schedule announcement"}
+        </button>
+      </Card>
+
+      <div className="disp" style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Sent history</div>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        {loading ? (
+          <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
+        ) : items.length === 0 ? (
+          <Empty title="No announcements sent yet" />
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr><th style={th}>Title</th><th style={th}>Priority</th><th style={th}>Targets</th><th style={th}>Window</th><th style={th}>Status</th><th style={th}>Acknowledged</th><th style={th}>Actions</th></tr>
+              </thead>
+              <tbody>
+                {items.map((a) => {
+                  const status = statusOf(a);
+                  const targetLabel = a.targetMarkets === "ALL" ? "All markets" : a.targetMarkets.split(",").map((c) => MARKETS.find((m) => m.code === c)?.name || c).join(", ");
+                  return (
+                    <tr key={a.announcementId}>
+                      <td style={td}>{a.title}</td>
+                      <td style={td}><StatusPill status={a.priority} meta={PRIORITY_META} /></td>
+                      <td style={td}>{targetLabel}</td>
+                      <td style={td} className="mono">{new Date(a.startDatetime).toLocaleDateString("en-US")} → {new Date(a.expirationDatetime).toLocaleDateString("en-US")}</td>
+                      <td style={td}><StatusPill status={status} meta={STATUS_STYLES} /></td>
+                      <td style={td}>{a.readCount} user(s)</td>
+                      <td style={td}>
+                        {a.isActive && (
+                          <button onClick={() => remove(a.announcementId)} disabled={busyId === a.announcementId} style={{ ...btnGhost, color: "var(--danger)", opacity: busyId === a.announcementId ? 0.5 : 1 }}>
+                            {busyId === a.announcementId ? "…" : "🗑 Delete"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-
-      {showForm && (
-        <NewAnnouncementModal
-          onClose={() => setShowForm(false)}
-          onCreated={() => { setShowForm(false); load(); }}
-          error={error}
-          setError={setError}
-        />
-      )}
-    </div>
-  );
-}
-
-function NewAnnouncementModal({
-  onClose, onCreated, error, setError,
-}: { onClose: () => void; onCreated: () => void; error: string; setError: (s: string) => void }) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [priority, setPriority] = useState("URGENT");
-  const [allMarkets, setAllMarkets] = useState(true);
-  const [markets, setMarkets] = useState<string[]>([]);
-  const [startDatetime, setStartDatetime] = useState("");
-  const [expirationDatetime, setExpirationDatetime] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  function toggleMarket(m: string) {
-    setMarkets((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]));
-  }
-
-  async function submit() {
-    setSubmitting(true);
-    setError("");
-    const targetMarkets = allMarkets ? "ALL" : markets.join(",");
-    const res = await fetch("/api/announcements", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content, priority, targetMarkets, startDatetime, expirationDatetime }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (!res.ok) { setError(data.error || "Failed to create announcement."); return; }
-    onCreated();
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="font-disp font-bold text-lg mb-4">New Announcement</div>
-        <div className="space-y-3">
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Title</div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Message</div>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} className="input" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Priority</div>
-            <select value={priority} onChange={(e) => setPriority(e.target.value)} className="input">
-              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Target markets</div>
-            <label className="flex items-center gap-2 text-sm mb-1.5">
-              <input type="checkbox" checked={allMarkets} onChange={(e) => setAllMarkets(e.target.checked)} /> All markets
-            </label>
-            {!allMarkets && (
-              <div className="flex gap-3">
-                {MARKETS.map((m) => (
-                  <label key={m} className="flex items-center gap-1.5 text-sm">
-                    <input type="checkbox" checked={markets.includes(m)} onChange={() => toggleMarket(m)} /> {m}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs font-semibold text-slate-500 mb-1.5">Start</div>
-              <input type="datetime-local" value={startDatetime} onChange={(e) => setStartDatetime(e.target.value)} className="input" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-500 mb-1.5">Expires</div>
-              <input type="datetime-local" value={expirationDatetime} onChange={(e) => setExpirationDatetime(e.target.value)} className="input" />
-            </div>
-          </div>
-        </div>
-        {error && <div className="text-sm text-danger mt-3">{error}</div>}
-        <div className="flex gap-2 justify-end mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">Cancel</button>
-          <button
-            onClick={submit}
-            disabled={submitting || !title || !content || !startDatetime || !expirationDatetime || (!allMarkets && markets.length === 0)}
-            className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {submitting ? "Sending…" : "Send Announcement"}
-          </button>
-        </div>
-      </div>
-      <style jsx global>{`.input { width:100%; padding:9px 11px; border-radius:8px; border:1px solid #E2E5EA; font-size:13.5px; }`}</style>
+      </Card>
     </div>
   );
 }

@@ -59,9 +59,9 @@ export function StatusPill({ status, meta }: { status: string; meta?: Record<str
   );
 }
 
-export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+export function Card({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={className} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
+    <div className={className} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)", ...style }}>
       {children}
     </div>
   );
@@ -154,6 +154,29 @@ export const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11
 export const btnPrimary: React.CSSProperties = { padding: "9px 16px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" };
 export const btnGhost: React.CSSProperties = { padding: "7px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "#fff", color: "var(--text)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" };
 export const btnDanger: React.CSSProperties = { padding: "7px 12px", borderRadius: 7, border: "1px solid var(--danger)", background: "var(--danger-bg)", color: "var(--danger)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" };
+
+export const BRANDS = ["Apple", "Samsung", "Google", "Xiaomi", "OPPO", "Vivo", "Other"];
+
+export type VariantDraft = { brand: string; modelName: string; storage: string; color: string; price: number };
+
+export function VariantDraftFields({ draft, setDraft }: { draft: VariantDraft; setDraft: (d: VariantDraft) => void }) {
+  return (
+    <div style={{ border: "1px dashed var(--accent)", borderRadius: 8, padding: 12, background: "var(--accent-bg)", marginTop: 8 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--accent-dark)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>New model details</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <Field label="Brand">
+          <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} style={inputStyle}>
+            {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </Field>
+        <Field label="Model name"><input value={draft.modelName} onChange={(e) => setDraft({ ...draft, modelName: e.target.value })} placeholder="e.g. iPhone 15 Pro" style={inputStyle} /></Field>
+        <Field label="Storage"><input value={draft.storage} onChange={(e) => setDraft({ ...draft, storage: e.target.value })} placeholder="e.g. 128GB" style={inputStyle} /></Field>
+        <Field label="Color"><input value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} placeholder="e.g. Blue" style={inputStyle} /></Field>
+        <Field label="Base retail price (NTD)" full><input type="number" value={draft.price} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} style={inputStyle} /></Field>
+      </div>
+    </div>
+  );
+}
 
 export const th: React.CSSProperties = { textAlign: "left", padding: "11px 16px", fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.03em", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
 export const td: React.CSSProperties = { padding: "11px 16px", borderBottom: "1px solid var(--border)" };

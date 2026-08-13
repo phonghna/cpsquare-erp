@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { StatusPill, INSTALLMENT_META } from "@/components/ui";
+import { StatusPill, Card, KPI, Tabs, Empty, Field, ModalShell, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
 
 type Schedule = {
   scheduleId: string;
@@ -12,18 +12,37 @@ type Schedule = {
   status: string;
   orderCode: string;
   customerName: string;
+  customerSocialHandle: string | null;
   marketCode: string;
   remainingBalanceNtd: string;
 };
 
-type Tab = "OVERDUE" | "DUE_SOON" | "ALL";
+type DunningLog = {
+  logId: string;
+  scheduleId: string;
+  orderCode: string;
+  contactChannel: string;
+  dunningResult: string;
+  promisedPaymentDate: string | null;
+  csNotes: string | null;
+  performedBy: string;
+  createdAt: string;
+};
 
 const CHANNELS = ["LINE", "TIKTOK", "PHONE", "FACEBOOK"];
+const DUNNING_META = {
+  PENDING: { label: "Pending", color: "var(--warn)", bg: "var(--warn-bg)" },
+  PAID: { label: "Paid", color: "var(--ok)", bg: "var(--ok-bg)" },
+};
+
+const fmt = (n: string) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
+const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-US");
 
 export default function InstallmentsPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [dunningLogs, setDunningLogs] = useState<DunningLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("OVERDUE");
+  const [tab, setTab] = useState("overdue");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [dunningTarget, setDunningTarget] = useState<Schedule | null>(null);
@@ -33,6 +52,7 @@ export default function InstallmentsPage() {
     const res = await fetch("/api/installments");
     const data = await res.json();
     setSchedules(data.schedules || []);
+    setDunningLogs(data.dunningLogs || []);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -41,14 +61,15 @@ export default function InstallmentsPage() {
   const in5Days = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + 5); return d; }, [today]);
 
   function dueDateOf(s: Schedule) { return new Date(s.dueDate); }
+  function daysOverdue(s: Schedule) { return Math.round((today.getTime() - dueDateOf(s).getTime()) / 86400000); }
   function isOverdue(s: Schedule) { return s.status === "PENDING" && dueDateOf(s) < today; }
   function isDueSoon(s: Schedule) { return s.status === "PENDING" && dueDateOf(s) >= today && dueDateOf(s) <= in5Days; }
 
-  const overdue = useMemo(() => schedules.filter(isOverdue), [schedules, today]);
-  const dueSoon = useMemo(() => schedules.filter(isDueSoon), [schedules, today, in5Days]);
-  const rows = tab === "OVERDUE" ? overdue : tab === "DUE_SOON" ? dueSoon : schedules;
-
-  const fmt = (n: string) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
+  const overdue = useMemo(() => schedules.filter(isOverdue).sort((a, b) => daysOverdue(b) - daysOverdue(a)), [schedules, today]);
+  const dueSoon = useMemo(() => schedules.filter(isDueSoon).sort((a, b) => daysOverdue(b) - daysOverdue(a)), [schedules, today, in5Days]);
+  const allRows = useMemo(() => schedules.slice().sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()), [schedules]);
+  const openCount = useMemo(() => schedules.filter((s) => s.status === "PENDING").length, [schedules]);
+  const instOrderCount = useMemo(() => new Set(schedules.map((s) => s.orderId)).size, [schedules]);
 
   async function markPaid(scheduleId: string) {
     setBusy(scheduleId);
@@ -60,92 +81,122 @@ export default function InstallmentsPage() {
     load();
   }
 
-  const TABS: { key: Tab; label: string; count: number }[] = [
-    { key: "OVERDUE", label: "Overdue", count: overdue.length },
-    { key: "DUE_SOON", label: "Due Soon", count: dueSoon.length },
-    { key: "ALL", label: "All Schedules", count: schedules.length },
-  ];
+  const rows = tab === "overdue" ? overdue : tab === "duesoon" ? dueSoon : allRows;
 
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="font-disp text-2xl font-bold">Installment Debt Board</h1>
-        <p className="text-sm text-slate-500 mt-1">Payment schedules generated on delivery for installment orders.</p>
-      </div>
-
-      <div className="flex gap-1 mb-4">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-              tab === t.key ? "bg-accent text-white border-accent" : "border-slate-200 text-slate-600"
-            }`}
-          >
-            {t.label} ({t.count})
-          </button>
-        ))}
-      </div>
-
-      {error && <div className="text-sm text-danger mb-3">{error}</div>}
-
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-10 text-center text-slate-400 text-sm">Nothing here.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                <th className="p-3">Order Code</th><th className="p-3">Customer</th><th className="p-3">Market</th>
-                <th className="p-3">Period</th><th className="p-3">Amount Due</th><th className="p-3">Due Date</th>
-                <th className="p-3">Status</th><th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((s) => (
-                <tr key={s.scheduleId} className="border-b border-slate-100">
-                  <td className="p-3 font-mono font-bold">{s.orderCode}</td>
-                  <td className="p-3">{s.customerName}</td>
-                  <td className="p-3">{s.marketCode}</td>
-                  <td className="p-3">{s.periodNumber}</td>
-                  <td className="p-3 font-mono">{fmt(s.amountDueNtd)}</td>
-                  <td className={`p-3 ${isOverdue(s) ? "text-danger font-semibold" : "text-slate-500"}`}>
-                    {new Date(s.dueDate).toLocaleDateString()}
-                  </td>
-                  <td className="p-3"><StatusPill status={s.status} meta={INSTALLMENT_META} /></td>
-                  <td className="p-3 space-x-2 whitespace-nowrap">
-                    {s.status === "PENDING" && (
+  function RowTable({ data, showDays }: { data: Schedule[]; showDays: boolean }) {
+    if (data.length === 0) return <Empty title="Nothing here" sub="Deliver an INSTALLMENT order to auto-generate its schedule." />;
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Period</th><th style={th}>Amount</th><th style={th}>Due date</th>
+              {showDays && <th style={th}>Days overdue</th>}
+              <th style={th}>Status</th><th style={th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r) => {
+              const days = daysOverdue(r);
+              return (
+                <tr key={r.scheduleId}>
+                  <td style={{ ...td, fontWeight: 700 }} className="mono">{r.orderCode}</td>
+                  <td style={td}>{r.customerName} <span style={{ color: "var(--text-faint)" }}>({r.customerSocialHandle})</span></td>
+                  <td style={td}>#{r.periodNumber}</td>
+                  <td style={td} className="mono">{fmt(r.amountDueNtd)}</td>
+                  <td style={td}>{fmtDate(r.dueDate)}</td>
+                  {showDays && (
+                    <td style={{ ...td, fontWeight: 700, color: days > 0 ? "var(--danger)" : "var(--text-dim)" }}>
+                      {days > 0 ? `${days}d overdue` : `${Math.abs(days)}d left`}
+                    </td>
+                  )}
+                  <td style={td}><StatusPill status={r.status} meta={DUNNING_META} /></td>
+                  <td style={td}>
+                    {r.status === "PENDING" && (
                       <>
-                        <button
-                          onClick={() => setDunningTarget(s)}
-                          className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold"
-                        >
-                          Log dunning
-                        </button>
-                        <button
-                          onClick={() => markPaid(s.scheduleId)}
-                          disabled={busy === s.scheduleId}
-                          className="px-2.5 py-1 rounded-md bg-accent text-white text-xs font-semibold disabled:opacity-40"
-                        >
-                          {busy === s.scheduleId ? "…" : "Mark as paid"}
+                        <button onClick={() => setDunningTarget(r)} style={{ ...btnGhost, marginRight: 6 }}>Log dunning</button>
+                        <button onClick={() => markPaid(r.scheduleId)} disabled={busy === r.scheduleId} style={{ ...btnGhost, opacity: busy === r.scheduleId ? 0.5 : 1 }}>
+                          {busy === r.scheduleId ? "…" : "Mark as paid"}
                         </button>
                       </>
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-5">
+        <h1 className="disp text-2xl font-bold">Installment Debt Board</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Upfront downpayment collected via COD on delivery; remaining balance splits into 3/6/9/12-month schedules auto-generated once DELIVERED.</p>
+      </div>
+
+      {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
+
+      {loading ? (
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
+            <KPI label="Overdue periods" value={String(overdue.length)} sub={fmt(String(overdue.reduce((s, r) => s + Number(r.amountDueNtd), 0))) + " at risk"} accent="var(--danger)" />
+            <KPI label="Due within 5 days" value={String(dueSoon.length)} sub={fmt(String(dueSoon.reduce((s, r) => s + Number(r.amountDueNtd), 0))) + " upcoming"} accent="var(--warn)" />
+            <KPI label="All open schedules" value={String(openCount)} sub={`${instOrderCount} installment orders`} />
+          </div>
+
+          <Tabs
+            tabs={[
+              { id: "overdue", label: `Overdue (${overdue.length})` },
+              { id: "duesoon", label: `Due Soon (${dueSoon.length})` },
+              { id: "all", label: `All Schedules (${allRows.length})` },
+            ]}
+            active={tab}
+            onChange={setTab}
+          />
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <RowTable data={rows} showDays />
+          </Card>
+
+          <div className="disp" style={{ fontWeight: 700, fontSize: 15, margin: "22px 0 10px" }}>Installment_Dunning_Logs</div>
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            {dunningLogs.length === 0 ? (
+              <Empty title="No dunning attempts logged yet" />
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr><th style={th}>Time</th><th style={th}>Order</th><th style={th}>Channel</th><th style={th}>Result</th><th style={th}>Promised date</th><th style={th}>By</th><th style={th}>Notes</th></tr>
+                  </thead>
+                  <tbody>
+                    {dunningLogs.map((l) => (
+                      <tr key={l.logId}>
+                        <td style={td} className="mono">{new Date(l.createdAt).toLocaleString("en-US")}</td>
+                        <td style={td} className="mono">{l.orderCode}</td>
+                        <td style={td}>{l.contactChannel}</td>
+                        <td style={td}>{l.dunningResult}</td>
+                        <td style={td}>{l.promisedPaymentDate ? fmtDate(l.promisedPaymentDate) : "—"}</td>
+                        <td style={td}>{l.performedBy}</td>
+                        <td style={td}>{l.csNotes || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
 
       {dunningTarget && (
         <DunningModal
           schedule={dunningTarget}
           onClose={() => setDunningTarget(null)}
-          onLogged={() => setDunningTarget(null)}
+          onLogged={() => { setDunningTarget(null); load(); }}
         />
       )}
     </div>
@@ -155,7 +206,7 @@ export default function InstallmentsPage() {
 function DunningModal({
   schedule, onClose, onLogged,
 }: { schedule: Schedule; onClose: () => void; onLogged: () => void }) {
-  const [channel, setChannel] = useState("LINE");
+  const [channel, setChannel] = useState(CHANNELS[0]);
   const [result, setResult] = useState("");
   const [promisedDate, setPromisedDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -163,6 +214,7 @@ function DunningModal({
   const [error, setError] = useState("");
 
   async function submit() {
+    if (!result.trim()) return;
     setSubmitting(true);
     setError("");
     const res = await fetch(`/api/installments/${schedule.scheduleId}/dunning`, {
@@ -177,41 +229,31 @@ function DunningModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="font-disp font-bold text-lg mb-1">Log Dunning — {schedule.orderCode}</div>
-        <p className="text-xs text-slate-500 mb-4">Period {schedule.periodNumber} · {schedule.customerName}</p>
-
-        <div className="space-y-3">
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Channel</div>
-            <select value={channel} onChange={(e) => setChannel(e.target.value)} className="input">
-              {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Result</div>
-            <input value={result} onChange={(e) => setResult(e.target.value)} className="input" placeholder="e.g. Promised to pay Friday" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Promised payment date</div>
-            <input type="date" value={promisedDate} onChange={(e) => setPromisedDate(e.target.value)} className="input" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1.5">Notes</div>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="input" />
-          </div>
-        </div>
-
-        {error && <div className="text-sm text-danger mt-3">{error}</div>}
-        <div className="flex gap-2 justify-end mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">Cancel</button>
-          <button onClick={submit} disabled={submitting || !result.trim()} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50">
-            {submitting ? "Saving…" : "Save"}
-          </button>
-        </div>
+    <ModalShell onClose={onClose} title={`Log dunning attempt — ${schedule.orderCode} (Period #${schedule.periodNumber})`}>
+      <Field label="Contact channel">
+        <select value={channel} onChange={(e) => setChannel(e.target.value)} style={inputStyle}>
+          {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label="Result">
+        <input value={result} onChange={(e) => setResult(e.target.value)} placeholder="e.g. Promised to pay Friday" style={inputStyle} />
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label="Promised payment date (if any)">
+        <input type="date" value={promisedDate} onChange={(e) => setPromisedDate(e.target.value)} style={inputStyle} />
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label="Notes">
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+      </Field>
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>Cancel</button>
+        <button onClick={submit} disabled={submitting || !result.trim()} style={{ ...btnPrimary, opacity: submitting || !result.trim() ? 0.6 : 1 }}>
+          {submitting ? "Saving…" : "Save log"}
+        </button>
       </div>
-      <style jsx global>{`.input { width:100%; padding:9px 11px; border-radius:8px; border:1px solid #E2E5EA; font-size:13.5px; }`}</style>
-    </div>
+    </ModalShell>
   );
 }

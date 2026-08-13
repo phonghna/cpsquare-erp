@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { orders, orderItems, orderAccessories } from "@/lib/schema";
+import { orders, orderItems, orderAccessories, productVariants } from "@/lib/schema";
 import { getSession, canAccessPage } from "@/lib/auth";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -29,15 +29,21 @@ export async function GET() {
   }
   const orderIds = pendingOrders.map((o) => o.orderId);
 
-  const [items, accessories] = await Promise.all([
+  const [items, accessories, variants] = await Promise.all([
     db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds)),
     db.select().from(orderAccessories).where(inArray(orderAccessories.orderId, orderIds)),
+    db.select({ variantId: productVariants.variantId, modelName: productVariants.modelName, sellingPriceNtd: productVariants.sellingPriceNtd }).from(productVariants),
   ]);
+  const variantById = new Map(variants.map((v) => [v.variantId, v]));
 
   const result = pendingOrders.map((o) => ({
     ...o,
-    items: items.filter((i) => i.orderId === o.orderId),
-    accessories: accessories.filter((a) => a.orderId === o.orderId),
+    items: items
+      .filter((i) => i.orderId === o.orderId)
+      .map((i) => ({ ...i, modelName: variantById.get(i.variantId)?.modelName || i.variantId, basePriceNtd: variantById.get(i.variantId)?.sellingPriceNtd || i.itemPriceNtd })),
+    accessories: accessories
+      .filter((a) => a.orderId === o.orderId)
+      .map((a) => ({ ...a, priceNtd: variantById.get(a.variantId)?.sellingPriceNtd || "0" })),
   }));
 
   return NextResponse.json({ orders: result });

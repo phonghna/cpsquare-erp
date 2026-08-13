@@ -1,32 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { StatusPill, STATUS_META } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
+import {
+  StatusPill, STATUS_META, Card, Empty, Tabs, ModalShell, Field, inputStyle, btnPrimary, btnGhost,
+  tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS,
+} from "@/components/ui";
+import SearchCombobox from "@/components/SearchCombobox";
 
 type Item = {
-  imeiSerial: string;
-  variantId: string;
-  status: string;
-  currentLocation: string;
-  batteryHealth: number | null;
-  cosmeticCondition: string | null;
+  imeiSerial: string; variantId: string; status: string; currentLocation: string;
+  batteryHealth: number | null; cosmeticCondition: string | null; orderId: string | null;
+  variant: { variantId: string; modelName: string; color: string | null } | null;
+  order: { orderCode: string; customerName: string; customerSocialHandle: string | null; marketCode: string } | null;
 };
+type Variant = { variantId: string; modelName: string; color: string | null; sellingPriceNtd: string };
+
+const fmt = (n: string | number) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
 
 export default function InventoryPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([]);
   const [loading, setLoading] = useState(true);
   const [canOperate, setCanOperate] = useState(true);
   const [canManage, setCanManage] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [tab, setTab] = useState("available");
+  const [q, setQ] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/inventory");
-    const data = await res.json();
-    setItems(data.items || []);
-    setCanManage(!!data.canManage);
+    const [invRes, varRes] = await Promise.all([fetch("/api/inventory"), fetch("/api/inventory/variants")]);
+    const invData = await invRes.json();
+    const varData = await varRes.json();
+    setItems(invData.items || []);
+    setCanManage(!!invData.canManage);
+    setVariants(varData.variants || []);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -34,167 +44,220 @@ export default function InventoryPage() {
   async function act(imei: string, action: string) {
     setBusy(imei);
     const res = await fetch(`/api/inventory/${imei}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
     });
     if (res.status === 403) setCanOperate(false);
     setBusy(null);
     load();
   }
 
+  async function deleteDevice(imei: string) {
+    setBusy(imei);
+    await fetch(`/api/inventory/${imei}/delete`, { method: "POST" });
+    setBusy(null);
+    load();
+  }
+
+  const available = useMemo(
+    () => items.filter((i) => ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD"].includes(i.status) && matches(i, q)),
+    [items, q]
+  );
+  const reserved = useMemo(
+    () => items.filter((i) => ["RESERVED", "PACKING", "SHIPPED"].includes(i.status) && matches(i, q)),
+    [items, q]
+  );
+
+  function matches(i: Item, query: string) {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return i.imeiSerial.includes(query) || (i.variant?.modelName || "").toLowerCase().includes(q);
+  }
+
   return (
     <div>
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="font-disp text-2xl font-bold">IMEI Inventory</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Centralized at CPSquare Warehouse (TW) — every serialized device serves all 4 markets from one pool.
+          <h1 className="disp text-2xl font-bold">IMEI Inventory</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>
+            Centralized at CPSquare Warehouse (TW) — every serialized device serves all 4 markets from one pool.{!canOperate && " Search-only for your role."}
           </p>
         </div>
         {canManage && (
           <div className="flex gap-2">
-            <button onClick={() => setShowBulk(true)} className="px-4 py-2 rounded-lg border border-slate-200 font-semibold text-sm">
-              Bulk Import
-            </button>
-            <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-lg bg-accent text-white font-semibold text-sm">
-              + Add New IMEI
-            </button>
+            <button onClick={() => setShowAdd(true)} style={btnGhost}>+ Add Single Device</button>
+            <button onClick={() => setShowBulk(true)} style={btnGhost}>⬆ Bulk Import Excel</button>
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                <th className="p-3">IMEI</th><th className="p-3">SKU</th><th className="p-3">Battery</th>
-                <th className="p-3">Location</th><th className="p-3">Status</th><th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.imeiSerial} className="border-b border-slate-100">
-                  <td className="p-3 font-mono">{i.imeiSerial}</td>
-                  <td className="p-3">{i.variantId}</td>
-                  <td className="p-3">{i.batteryHealth ?? "—"}%</td>
-                  <td className="p-3 text-slate-500">{i.currentLocation}</td>
-                  <td className="p-3"><StatusPill status={i.status} meta={STATUS_META} /></td>
-                  <td className="p-3 space-x-2">
-                    {canOperate && i.status === "IN_STOCK" && (
-                      <>
-                        <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>Check-out live</ActionBtn>
-                        <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>Media hold</ActionBtn>
-                      </>
-                    )}
-                    {canOperate && i.status === "CHECKED_OUT_LIVE" && (
-                      <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>Check-in shelf</ActionBtn>
-                    )}
-                    {canOperate && i.status === "MEDIA_HOLD" && (
-                      <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <Tabs
+        tabs={[{ id: "available", label: `Available Stock (${available.length})` }, { id: "reserved", label: `Reserved Items Board (${reserved.length})` }]}
+        active={tab}
+        onChange={setTab}
+      />
+      <div className="mb-4">
+        <input placeholder="Search by IMEI or product name..." value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, maxWidth: 300 }} />
       </div>
 
-      {showAdd && (
-        <AddImeiModal
-          onClose={() => setShowAdd(false)}
-          onCreated={() => { setShowAdd(false); load(); }}
-        />
+      {loading ? (
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
+      ) : tab === "available" ? (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          {available.length === 0 ? <Empty title="No devices match" /> : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead><tr><th style={th}>IMEI</th><th style={th}>Product</th><th style={th}>Battery</th><th style={th}>Cosmetic</th><th style={th}>Location</th><th style={th}>Status</th><th style={th}></th></tr></thead>
+                <tbody>
+                  {available.map((i) => (
+                    <tr key={i.imeiSerial}>
+                      <td style={td} className="mono">{i.imeiSerial}</td>
+                      <td style={td}>{i.variant?.modelName} <span style={{ color: "var(--text-faint)" }}>· {i.variant?.color}</span></td>
+                      <td style={td}>{i.batteryHealth ?? "—"}%</td>
+                      <td style={td}>{i.cosmeticCondition || "—"}</td>
+                      <td style={{ ...td, color: "var(--text-dim)" }}>{i.currentLocation}</td>
+                      <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
+                      <td style={td}>
+                        {canOperate && i.status === "IN_STOCK" && (
+                          <>
+                            <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>Check-out live</ActionBtn>
+                            <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>Media hold</ActionBtn>
+                          </>
+                        )}
+                        {canOperate && i.status === "CHECKED_OUT_LIVE" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>Check-in shelf</ActionBtn>}
+                        {canOperate && i.status === "MEDIA_HOLD" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>}
+                        {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
+                        {canManage && i.status === "IN_STOCK" && (
+                          <button onClick={() => deleteDevice(i.imeiSerial)} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          {reserved.length === 0 ? <Empty title="No IMEIs reserved for orders" /> : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead><tr><th style={th}>IMEI</th><th style={th}>Product / Color</th><th style={th}>Order Code</th><th style={th}>Customer</th><th style={th}>Market</th><th style={th}>Progress</th><th style={th}></th></tr></thead>
+                <tbody>
+                  {reserved.map((i) => (
+                    <tr key={i.imeiSerial}>
+                      <td style={td} className="mono">{i.imeiSerial}</td>
+                      <td style={td}>{i.variant?.modelName} · {i.variant?.color}</td>
+                      <td style={{ ...td, fontWeight: 700 }} className="mono">{i.order?.orderCode || "—"}</td>
+                      <td style={td}>{i.order ? `${i.order.customerName}${i.order.customerSocialHandle ? ` (${i.order.customerSocialHandle})` : ""}` : "—"}</td>
+                      <td style={td}>{i.order?.marketCode || "—"}</td>
+                      <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
+                      <td style={td}>{canOperate && i.status === "RESERVED" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>Unassign / Return to shelf</ActionBtn>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
-      {showBulk && (
-        <BulkImportModal
-          onClose={() => setShowBulk(false)}
-          onImported={() => { setShowBulk(false); load(); }}
-        />
-      )}
+
+      {showAdd && <AddDeviceModal variants={variants} onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(); }} />}
+      {showBulk && <BulkImportModal onClose={() => setShowBulk(false)} onImported={() => { setShowBulk(false); load(); }} />}
     </div>
   );
 }
 
 function ActionBtn({ children, onClick, busy }: { children: React.ReactNode; onClick: () => void; busy: boolean }) {
   return (
-    <button onClick={onClick} disabled={busy} className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold disabled:opacity-40">
+    <button onClick={onClick} disabled={busy} style={{ ...btnGhost, marginRight: 6, opacity: busy ? 0.4 : 1 }}>
       {busy ? "…" : children}
     </button>
   );
 }
 
-function AddImeiModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [variants, setVariants] = useState<{ variantId: string; modelName: string }[]>([]);
-  const [imeiSerial, setImeiSerial] = useState("");
-  const [variantId, setVariantId] = useState("");
-  const [batteryHealth, setBatteryHealth] = useState("");
-  const [cosmeticCondition, setCosmeticCondition] = useState("");
+function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[]; onClose: () => void; onCreated: () => void }) {
+  const [variantId, setVariantId] = useState(variants[0]?.variantId || "");
+  const [imeiSerial, setImei] = useState("");
+  const [battery, setBattery] = useState(98);
+  const [cosmetic, setCosmetic] = useState("99%");
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<VariantDraft>({ brand: BRANDS[0], modelName: "", storage: "", color: "", price: 0 });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      const res = await fetch("/api/inventory/variants");
-      const data = await res.json();
-      setVariants(data.variants || []);
-      if (data.variants?.[0]) setVariantId(data.variants[0].variantId);
-    })();
-  }, []);
+  function handleCreate(query: string) {
+    setDraft({ brand: BRANDS[0], modelName: query, storage: "", color: "", price: 0 });
+    setCreating(true);
+  }
+
+  async function saveNewVariant() {
+    if (!draft.modelName.trim() || !draft.storage.trim() || !draft.color.trim()) return;
+    const res = await fetch("/api/pricebook", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brand: draft.brand, modelGroup: draft.modelName, storage: draft.storage, color: draft.color, price: draft.price }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Failed to create model."); return; }
+    setVariantId(data.sku);
+    setCreating(false);
+    // refresh local variant list so the combobox shows the new SKU
+    variants.unshift({ variantId: data.sku, modelName: `${draft.modelName} ${draft.storage}`.trim(), color: draft.color, sellingPriceNtd: String(draft.price) });
+  }
 
   async function submit() {
+    if (!imeiSerial.trim()) return;
     setSubmitting(true);
     setError("");
     const res = await fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imeiSerial, variantId, batteryHealth: batteryHealth || null, cosmeticCondition: cosmeticCondition || null }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic }),
     });
     const data = await res.json();
     setSubmitting(false);
-    if (!res.ok) { setError(data.error || "Failed to add IMEI."); return; }
+    if (!res.ok) { setError(data.error || "Failed to add device."); return; }
     onCreated();
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="font-disp font-bold text-lg mb-4">Add New IMEI</div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="IMEI" full>
-            <input value={imeiSerial} onChange={(e) => setImeiSerial(e.target.value)} className="input" placeholder="e.g. 356938035643809" />
-          </Field>
-          <Field label="SKU" full>
-            <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className="input">
-              {variants.map((v) => <option key={v.variantId} value={v.variantId}>{v.modelName} — {v.variantId}</option>)}
-            </select>
-          </Field>
-          <Field label="Battery health (%)">
-            <input type="number" value={batteryHealth} onChange={(e) => setBatteryHealth(e.target.value)} className="input" />
-          </Field>
-          <Field label="Cosmetic condition">
-            <input value={cosmeticCondition} onChange={(e) => setCosmeticCondition(e.target.value)} className="input" placeholder="New / Grade A / Grade B…" />
-          </Field>
-        </div>
-        {error && <div className="text-sm text-danger mt-3">{error}</div>}
-        <div className="flex gap-2 justify-end mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">Cancel</button>
-          <button onClick={submit} disabled={submitting || !imeiSerial || !variantId} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50">
-            {submitting ? "Adding…" : "Add IMEI"}
-          </button>
-        </div>
+    <ModalShell onClose={onClose} title="Add Single Device">
+      <Field label="Model / Color (type to search, or create a brand-new model)">
+        <SearchCombobox
+          options={variants.map((p) => ({ ...p, __key: p.variantId }))}
+          value={variantId}
+          onSelect={(v) => { setVariantId(v); setCreating(false); }}
+          placeholder="e.g. iPhone 15 Pro 128GB Blue"
+          searchText={(p) => `${p.modelName} ${p.color}`}
+          renderLabel={(p) => `${p.modelName} — ${p.color || "—"} (${fmt(p.sellingPriceNtd)})`}
+          allowCreate
+          onCreate={handleCreate}
+        />
+      </Field>
+      {creating && (
+        <>
+          <VariantDraftFields draft={draft} setDraft={setDraft} />
+          <button onClick={saveNewVariant} style={{ ...btnPrimary, width: "100%", marginTop: 10 }}>✓ Save new model to Price Book</button>
+        </>
+      )}
+      <div style={{ height: 10 }} />
+      <Field label="IMEI"><input value={imeiSerial} onChange={(e) => setImei(e.target.value)} placeholder="15-digit IMEI" style={inputStyle} /></Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <Field label="Battery %"><input type="number" value={battery} onChange={(e) => setBattery(Number(e.target.value))} style={inputStyle} /></Field>
+        <Field label="Cosmetic condition"><input value={cosmetic} onChange={(e) => setCosmetic(e.target.value)} style={inputStyle} /></Field>
       </div>
-      <style jsx global>{`.input { width:100%; padding:9px 11px; border-radius:8px; border:1px solid #E2E5EA; font-size:13.5px; }`}</style>
-    </div>
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>Cancel</button>
+        <button disabled={creating || submitting || !imeiSerial.trim() || !variantId} onClick={submit} style={{ ...btnPrimary, opacity: creating ? 0.5 : 1 }}>
+          {submitting ? "Adding…" : "Add device"}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
 function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
-  const [csv, setCsv] = useState("");
+  const [text, setText] = useState("356938035643809, IP14PM-256-BLK, 98, Like new");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
@@ -204,9 +267,7 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
     setError("");
     setResult(null);
     const res = await fetch("/api/inventory/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ csv }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv: text }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -215,55 +276,25 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="font-disp font-bold text-lg mb-1">Bulk Import IMEI Stock</div>
-        <p className="text-xs text-slate-500 mb-3">
-          One row per line: <code className="font-mono">imei,variant_id,battery_health,cosmetic_condition</code> — battery and condition may be left blank.
-        </p>
-        <textarea
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-          rows={10}
-          className="w-full p-3 rounded-lg border border-slate-200 font-mono text-xs"
-          placeholder={"356938035643809,IP14PM-256-BLK,98,New\n356938035643810,IP14PM-256-BLK,95,"}
-        />
-        {error && <div className="text-sm text-danger mt-3">{error}</div>}
-        {result && (
-          <div className="text-sm mt-3">
-            <div className="text-ok font-semibold">Imported {result.imported} row(s).</div>
-            {result.errors.length > 0 && (
-              <ul className="text-danger text-xs mt-1 list-disc pl-4">
-                {result.errors.map((e, i) => <li key={i}>{e}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
-        <div className="flex gap-2 justify-end mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">
-            {result ? "Close" : "Cancel"}
-          </button>
-          {!result && (
-            <button onClick={submit} disabled={submitting || !csv.trim()} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50">
-              {submitting ? "Importing…" : "Import"}
-            </button>
-          )}
-          {result && (
-            <button onClick={onImported} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold">
-              Done
-            </button>
+    <ModalShell onClose={onClose} title="Bulk Import Devices">
+      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>One device per line: IMEI, VariantSKU, Battery%, Cosmetic — paste one row per line (simulating an Excel upload).</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 }} />
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      {result && (
+        <div style={{ fontSize: 13, marginTop: 10 }}>
+          <div style={{ color: "var(--ok)", fontWeight: 600 }}>Imported {result.imported} row(s).</div>
+          {result.errors.length > 0 && (
+            <ul style={{ color: "var(--danger)", fontSize: 12, marginTop: 4, paddingLeft: 18 }}>
+              {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
           )}
         </div>
+      )}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>{result ? "Close" : "Cancel"}</button>
+        {!result && <button onClick={submit} disabled={submitting} style={btnPrimary}>{submitting ? "Importing…" : "Import rows"}</button>}
+        {result && <button onClick={onImported} style={btnPrimary}>Done</button>}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
-  return (
-    <div className={full ? "col-span-2" : ""}>
-      <div className="text-xs font-semibold text-slate-500 mb-1.5">{label}</div>
-      {children}
-    </div>
+    </ModalShell>
   );
 }

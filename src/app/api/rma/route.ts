@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { productItems } from "@/lib/schema";
+import { productItems, productVariants } from "@/lib/schema";
 import { getSession, canAccessPage } from "@/lib/auth";
 import { isNotNull } from "drizzle-orm";
 
@@ -12,5 +12,8 @@ export async function GET() {
   }
   const db = getDb();
   const rows = await db.select().from(productItems).where(isNotNull(productItems.rmaStage));
-  return NextResponse.json({ items: rows });
+  const variants = await db.select({ variantId: productVariants.variantId, modelName: productVariants.modelName }).from(productVariants);
+  const variantById = new Map(variants.map((v) => [v.variantId, v.modelName]));
+  const items = rows.map((r) => ({ ...r, modelName: variantById.get(r.variantId) || r.variantId }));
+  return NextResponse.json({ items });
 }

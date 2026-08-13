@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, btnPrimary, btnGhost } from "@/components/ui";
 
-type Item = { imeiSerial: string; variantId: string; currentLocation: string };
+type Item = { imeiSerial: string; variant: { modelName: string } | null };
 type ByMarket = Record<string, Item[]>;
 
-const MARKETS = ["VN", "ID", "TH", "PH"];
+const MARKETS = [
+  { code: "VN", name: "Vietnam" },
+  { code: "ID", name: "Indonesia" },
+  { code: "TH", name: "Thailand" },
+  { code: "PH", name: "Philippines" },
+];
 
 export default function LivePage() {
   const [byMarket, setByMarket] = useState<ByMarket>({ VN: [], ID: [], TH: [], PH: [] });
   const [myMarket, setMyMarket] = useState<string | null>(null);
+  const [role, setRole] = useState("");
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
   const [busyImei, setBusyImei] = useState<string | null>(null);
@@ -21,6 +28,7 @@ export default function LivePage() {
     const data = await res.json();
     setByMarket(data.byMarket || { VN: [], ID: [], TH: [], PH: [] });
     setMyMarket(data.myMarket || null);
+    setRole(data.role || "");
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -45,60 +53,52 @@ export default function LivePage() {
     load();
   }
 
+  const canZeroClick = role === "CS" || role === "STREAMER";
+
   return (
     <div>
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="font-disp text-2xl font-bold">Livestream Rotation</h1>
-          <p className="text-sm text-slate-500 mt-1">Devices currently on-air per market's live room.</p>
+          <h1 className="disp text-2xl font-bold">Livestream Rotation</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Four market blocks fed from one central TW pool.</p>
         </div>
-        {myMarket && (
-          <button
-            onClick={checkout}
-            disabled={checkingOut}
-            className="px-4 py-2 rounded-lg bg-accent text-white font-semibold text-sm disabled:opacity-50"
-          >
-            {checkingOut ? "Checking out…" : `Check-out device (zero-click) — ${myMarket}`}
+        {canZeroClick && (
+          <button onClick={checkout} disabled={checkingOut} style={{ ...btnPrimary, opacity: checkingOut ? 0.6 : 1 }}>
+            {checkingOut ? "Checking out…" : "📷 Check-out device (zero-click)"}
           </button>
         )}
       </div>
 
-      {error && <div className="text-sm text-danger mb-3">{error}</div>}
+      {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
       {loading ? (
-        <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {MARKETS.map((m) => (
-            <div key={m} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <div className="p-3 border-b border-slate-200 flex items-center justify-between">
-                <div className="font-disp font-bold text-sm">{m}</div>
-                <div className="text-[11px] text-slate-500">{byMarket[m]?.length || 0} live</div>
-              </div>
-              <div>
-                {(byMarket[m] || []).length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 text-xs">Nothing on-air.</div>
-                ) : (
-                  byMarket[m].map((item) => (
-                    <div key={item.imeiSerial} className="p-3 border-b border-slate-100">
-                      <div className="flex items-center gap-1.5 font-mono text-sm">
-                        <span className="live-dot inline-block w-1.5 h-1.5 rounded-full" style={{ background: "var(--info)" }} />
-                        {item.imeiSerial}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mb-2">{item.variantId}</div>
-                      <button
-                        onClick={() => checkin(item.imeiSerial)}
-                        disabled={busyImei === item.imeiSerial}
-                        className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold disabled:opacity-40"
-                      >
-                        {busyImei === item.imeiSerial ? "…" : "Check-in"}
-                      </button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
+          {MARKETS.map((m) => {
+            const items = byMarket[m.code] || [];
+            const isMine = m.code === myMarket;
+            return (
+              <Card key={m.code} style={{ padding: 16, border: isMine ? "2px solid var(--accent)" : "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div className="disp" style={{ fontWeight: 700, fontSize: 14 }}>{m.name} Market</div>
+                  <span className="live-dot" style={{ fontSize: 11, fontWeight: 700, color: "var(--info)" }}>● LIVE {items.length}</span>
+                </div>
+                {items.length === 0 && <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No devices checked out.</div>}
+                {items.map((i) => (
+                  <div key={i.imeiSerial} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: "1px solid var(--border)" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{i.variant?.modelName || i.imeiSerial}</div>
+                      <div className="mono" style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{i.imeiSerial}</div>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+                    <button onClick={() => checkin(i.imeiSerial)} disabled={busyImei === i.imeiSerial} style={{ ...btnGhost, opacity: busyImei === i.imeiSerial ? 0.4 : 1 }}>
+                      {busyImei === i.imeiSerial ? "…" : "Check-in"}
+                    </button>
+                  </div>
+                ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

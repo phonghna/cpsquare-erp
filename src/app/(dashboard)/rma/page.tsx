@@ -1,17 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RMA_STAGE_META } from "@/components/ui";
+import { Card, btnGhost } from "@/components/ui";
 
-type Item = { imeiSerial: string; variantId: string; rmaStage: string; cosmeticCondition: string | null };
+type Item = { imeiSerial: string; variantId: string; modelName: string; rmaStage: string };
 
-const STAGES = [
-  { key: "RECEIVE", label: "Receive" },
-  { key: "INSPECTION", label: "Inspection" },
-  { key: "REPAIRING", label: "Repairing" },
-  { key: "REPAIR_DONE", label: "Repair Done" },
-  { key: "SENT_OUT", label: "Sent Out" },
-];
+const STAGES = ["RECEIVE", "INSPECTION", "REPAIRING", "REPAIR_DONE", "SENT_OUT"];
 
 export default function RmaPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -30,8 +24,8 @@ export default function RmaPage() {
 
   const byStage = useMemo(() => {
     const map: Record<string, Item[]> = {};
-    for (const s of STAGES) map[s.key] = [];
-    for (const i of items) { if (map[i.rmaStage]) map[i.rmaStage].push(i); }
+    for (const s of STAGES) map[s] = [];
+    for (const i of items) { const stage = i.rmaStage || "RECEIVE"; if (map[stage]) map[stage].push(i); }
     return map;
   }, [items]);
 
@@ -47,47 +41,41 @@ export default function RmaPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-disp text-2xl font-bold">Repair / RMA</h1>
-        <p className="text-sm text-slate-500 mt-1">Devices moving through repair — advance each card as work progresses.</p>
+      <div className="mb-5">
+        <h1 className="disp text-2xl font-bold">Repair / RMA</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Five-stage repair lifecycle, shared across all markets at the TW workshop.</p>
       </div>
 
-      {error && <div className="text-sm text-danger mb-3">{error}</div>}
+      {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
       {loading ? (
-        <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {STAGES.map((s) => (
-            <div key={s.key} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <div className="p-3 border-b border-slate-200">
-                <div className="font-disp font-bold text-sm flex items-center gap-1.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: RMA_STAGE_META[s.key]?.color }} />
-                  {s.label}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px,1fr))", gap: 14 }}>
+          {STAGES.map((stage) => {
+            const stageItems = byStage[stage];
+            return (
+              <Card key={stage} style={{ padding: 14, background: "var(--paper)" }}>
+                <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", marginBottom: 10 }}>
+                  {stage} · {stageItems.length}
                 </div>
-                <div className="text-[11px] text-slate-500">{byStage[s.key].length} device(s)</div>
-              </div>
-              <div>
-                {byStage[s.key].length === 0 ? (
-                  <div className="p-5 text-center text-slate-400 text-xs">Empty</div>
-                ) : (
-                  byStage[s.key].map((i) => (
-                    <div key={i.imeiSerial} className="p-3 border-b border-slate-100">
-                      <div className="font-mono text-xs font-bold truncate">{i.imeiSerial}</div>
-                      <div className="text-[11px] text-slate-500 mb-2 truncate">{i.variantId}</div>
-                      <button
-                        onClick={() => advance(i.imeiSerial)}
-                        disabled={busy === i.imeiSerial}
-                        className="w-full px-2 py-1 rounded-md bg-accent text-white text-[11px] font-semibold disabled:opacity-40"
-                      >
-                        {busy === i.imeiSerial ? "…" : s.key === "SENT_OUT" ? "Complete → IN STOCK" : "Advance stage →"}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+                {stageItems.length === 0 && <div style={{ fontSize: 12, color: "var(--text-faint)" }}>Empty</div>}
+                {stageItems.map((i) => (
+                  <Card key={i.imeiSerial} style={{ padding: 10, marginBottom: 8 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{i.modelName}</div>
+                    <div className="mono" style={{ fontSize: 11, color: "var(--text-faint)", margin: "4px 0 8px" }}>{i.imeiSerial}</div>
+                    <button
+                      onClick={() => advance(i.imeiSerial)}
+                      disabled={busy === i.imeiSerial}
+                      style={{ ...btnGhost, width: "100%", textAlign: "center", opacity: busy === i.imeiSerial ? 0.5 : 1 }}
+                    >
+                      {busy === i.imeiSerial ? "…" : stage === "SENT_OUT" ? "✓ Complete → IN_STOCK" : "Advance stage →"}
+                    </button>
+                  </Card>
+                ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

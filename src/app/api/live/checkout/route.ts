@@ -6,15 +6,16 @@ import { liveRoomFor } from "../route";
 
 // Zero-click check-out: grabs the first IN_STOCK unit (any SKU) and puts it
 // live in the caller's own market room — no manual room/device picker.
+// Only single-market accounts (CS/Streamer) get this button.
 export async function POST() {
   const session = await getSession();
   if (!session || !canAccessPage(session.role, "live")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const market = session.markets[0];
-  if (!market) {
-    return NextResponse.json({ error: "Your account has no assigned market." }, { status: 400 });
+  if (session.markets.length !== 1) {
+    return NextResponse.json({ error: "Sign in as a single-market account (CS or Streamer) to check out devices." }, { status: 400 });
   }
+  const market = session.markets[0];
 
   const pool = getPool();
   const client = await pool.connect();

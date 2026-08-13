@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Card, Empty, ModalShell, btnPrimary, btnGhost } from "@/components/ui";
 
-type OrderItem = { itemId: string; imeiSerial: string; variantId: string; itemPriceNtd: string };
-type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; isVerified: boolean };
+type OrderItem = { itemId: string; imeiSerial: string; variantId: string; modelName: string; color: string | null; itemPriceNtd: string; basePriceNtd: string };
+type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; isVerified: boolean; priceNtd: string };
 type PackingOrder = {
   orderId: string;
   orderCode: string;
   marketCode: string;
+  salesChannel: string;
   customerName: string;
+  customerSocialHandle: string | null;
+  customerPhone: string | null;
+  postalCode: string | null;
   shippingAddress: string;
   carrierService: string;
+  paymentType: string;
   codCollectAmountNtd: string;
   totalInvoiceAmountNtd: string;
+  createdAt: string;
   items: OrderItem[];
   accessories: OrderAccessory[];
 };
@@ -22,6 +29,21 @@ const CARRIERS = [
   { code: "FAMILY", name: "FamilyMart" },
   { code: "TCAT", name: "T-Cat" },
 ];
+
+function csvCell(v: unknown) {
+  return `"${String(v ?? "").replace(/"/g, '""')}"`;
+}
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export default function PackingPage() {
   const [orders, setOrders] = useState<PackingOrder[]>([]);
@@ -45,82 +67,113 @@ export default function PackingPage() {
     return map;
   }, [orders]);
 
-  function exportCsv(carrier: string, list: PackingOrder[]) {
-    const header = ["order_code", "recipient", "address", "cod_amount", "carrier"];
-    const rows = list.map((o) => [
-      o.orderCode,
-      o.customerName,
-      o.shippingAddress,
-      o.codCollectAmountNtd,
-      o.carrierService,
-    ]);
-    const csv = [header, ...rows]
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `packing_${carrier}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  function exportCarrierCsv(carrierCode: string) {
+    const rows = buckets[carrierCode];
+    if (rows.length === 0) return;
+    const header = ["OrderCode", "RecipientName", "ContactHandle", "Address", "CarrierService", "CODAmountNTD", "ItemCount", "Products", "IMEIs"];
+    const lines = rows.map((o) =>
+      [
+        o.orderCode,
+        o.customerName,
+        o.customerSocialHandle || "",
+        o.shippingAddress,
+        CARRIERS.find((c) => c.code === o.carrierService)?.name || o.carrierService,
+        o.codCollectAmountNtd,
+        o.items.length,
+        o.items.map((i) => i.modelName).join(" | "),
+        o.items.map((i) => i.imeiSerial).join(" | "),
+      ]
+        .map(csvCell)
+        .join(",")
+    );
+    downloadCsv(`CPSquare_${carrierCode}_ShipExport_${Date.now()}.csv`, [header.join(","), ...lines].join("\n"));
+  }
+
+  // T-Cat 19-column flat line-item export: one row per phone / accessory / price-override line.
+  function exportTCat19() {
+    const rows = buckets.TCAT;
+    if (rows.length === 0) return;
+    const header = [
+      "OrderCode", "LineType", "ProductName", "IMEI_or_SKU", "Color", "Qty", "UnitPriceNTD", "LineTotalNTD",
+      "MarketCode", "SalesChannel", "CarrierService", "PaymentType", "CODCollectAmountNTD",
+      "RecipientInfo_NamePostalAddress", "PhoneNumber", "TrackingNumber", "OrderDate", "Notes", "RowIndexOfTotal",
+    ];
+    const csvRows = [header.join(",")];
+    rows.forEach((o) => {
+      type Line = { type: string; name: string; code: string; color: string; qty: number; price: number };
+      const lineItems: Line[] = [];
+      o.items.forEach((it) => {
+        const base = Number(it.basePriceNtd);
+        const price = Number(it.itemPriceNtd);
+        lineItems.push({ type: "PHONE", name: it.modelName, code: it.imeiSerial, color: it.color || "—", qty: 1, price });
+        if (price !== base) lineItems.push({ type: "DISCOUNT", name: `Price override on ${it.modelName}`, code: it.imeiSerial, color: "—", qty: 1, price: price - base });
+      });
+      o.accessories.forEach((a) => {
+        lineItems.push({ type: "ACCESSORY", name: a.accessoryName, code: a.variantId, color: "—", qty: 1, price: Number(a.priceNtd) });
+      });
+      const recipientInfo = `${o.customerName || ""} ${o.postalCode || ""} ${o.shippingAddress || ""}`;
+      lineItems.forEach((li, idx) => {
+        csvRows.push(
+          [
+            o.orderCode, li.type, li.name, li.code, li.color, li.qty, li.price, li.price * li.qty,
+            o.marketCode, o.salesChannel, o.carrierService, o.paymentType, o.codCollectAmountNtd,
+            recipientInfo, o.customerPhone || "", "", new Date(o.createdAt).toLocaleDateString("en-US"), "", `${idx + 1}/${lineItems.length}`,
+          ]
+            .map(csvCell)
+            .join(",")
+        );
+      });
+    });
+    downloadCsv(`CPSquare_TCAT_19col_${Date.now()}.csv`, csvRows.join("\n"));
   }
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-disp text-2xl font-bold">Fulfillment Packing</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Orders awaiting pack, grouped by carrier. Scan & Pack requires every IMEI confirmed and every accessory checked off.
-        </p>
+      <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="disp text-2xl font-bold">Fulfillment Packing</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Orders grouped into carrier buckets. Each order shows a dynamic checklist built from exactly what was selected at intake.</p>
+        </div>
       </div>
 
       {loading ? (
-        <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+        <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
+      ) : orders.length === 0 ? (
+        <Empty title="No orders pending pack" />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {CARRIERS.map((c) => (
-            <div key={c.code} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <div className="p-3 border-b border-slate-200 flex items-center justify-between">
-                <div>
-                  <div className="font-disp font-bold text-sm">{c.name}</div>
-                  <div className="text-[11px] text-slate-500">{buckets[c.code].length} order(s)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px,1fr))", gap: 16 }}>
+          {CARRIERS.map((c) => {
+            const list = buckets[c.code];
+            return (
+              <Card key={c.code} style={{ padding: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+                  <div className="disp" style={{ fontWeight: 700, fontSize: 14 }}>
+                    {c.name} <span style={{ color: "var(--text-faint)", fontWeight: 500, fontSize: 12 }}>· Picking list ({list.length})</span>
+                  </div>
+                  {c.code === "TCAT" ? (
+                    <button onClick={exportTCat19} disabled={list.length === 0} style={{ ...btnGhost, opacity: list.length === 0 ? 0.4 : 1 }}>⭳ T-Cat 19-col export</button>
+                  ) : (
+                    <button onClick={() => exportCarrierCsv(c.code)} disabled={list.length === 0} style={{ ...btnGhost, opacity: list.length === 0 ? 0.4 : 1 }}>⭳ Bulk Excel export</button>
+                  )}
                 </div>
-                <button
-                  onClick={() => exportCsv(c.code, buckets[c.code])}
-                  disabled={buckets[c.code].length === 0}
-                  className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold disabled:opacity-40"
-                >
-                  Bulk Excel export
-                </button>
-              </div>
-              <div>
-                {buckets[c.code].length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 text-xs">Nothing awaiting pack.</div>
-                ) : (
-                  buckets[c.code].map((o) => (
-                    <div key={o.orderId} className="p-3 border-b border-slate-100 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-mono font-bold text-sm truncate">{o.orderCode}</div>
-                        <div className="text-xs text-slate-500 truncate">{o.customerName}</div>
-                      </div>
-                      <button
-                        onClick={() => setActive(o)}
-                        className="px-2.5 py-1.5 rounded-md bg-accent text-white text-xs font-semibold flex-shrink-0"
-                      >
-                        Scan & Pack
-                      </button>
+                {list.length === 0 && <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No orders in this bucket.</div>}
+                {list.map((o) => (
+                  <div key={o.orderId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+                    <div>
+                      <div className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>{o.orderCode}</div>
+                      <div style={{ fontSize: 12.5, color: "var(--text-dim)" }}>{o.items.length} phone(s) → {o.customerName}</div>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+                    <button onClick={() => setActive(o)} style={btnPrimary}>Scan &amp; Pack</button>
+                  </div>
+                ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
       {active && (
-        <ScanPackModal
+        <PackScanModal
           order={active}
           onClose={() => setActive(null)}
           onCompleted={() => { setActive(null); load(); }}
@@ -130,7 +183,7 @@ export default function PackingPage() {
   );
 }
 
-function ScanPackModal({
+function PackScanModal({
   order, onClose, onCompleted,
 }: { order: PackingOrder; onClose: () => void; onCompleted: () => void }) {
   const [scanned, setScanned] = useState<Set<string>>(new Set());
@@ -140,7 +193,6 @@ function ScanPackModal({
 
   const allScanned = order.items.every((i) => scanned.has(i.imeiSerial));
   const allChecked = order.accessories.every((a) => checked.has(a.accessoryRowId));
-  const ready = allScanned && allChecked;
 
   async function complete() {
     setSubmitting(true);
@@ -160,43 +212,37 @@ function ScanPackModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="font-disp font-bold text-lg mb-1">Scan & Pack — {order.orderCode}</div>
-        <p className="text-xs text-slate-500 mb-4">{order.customerName} · {order.shippingAddress}</p>
-
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Devices ({order.items.length})</div>
-        <div className="space-y-2 mb-4">
-          {order.items.length === 0 ? (
-            <div className="text-xs text-slate-400">No devices on this order.</div>
-          ) : (
-            order.items.map((i) => (
-              <div key={i.itemId} className="flex items-center justify-between border border-slate-200 rounded-lg p-2.5">
-                <div>
-                  <div className="font-mono text-sm">{i.imeiSerial}</div>
-                  <div className="text-[11px] text-slate-500">{i.variantId}</div>
-                </div>
-                <button
-                  onClick={() => setScanned((s) => new Set(s).add(i.imeiSerial))}
-                  disabled={scanned.has(i.imeiSerial)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
-                    scanned.has(i.imeiSerial) ? "bg-ok/10 text-ok" : "border border-slate-200"
-                  }`}
-                >
-                  {scanned.has(i.imeiSerial) ? "✓ Scanned" : "Confirm scan"}
-                </button>
+    <ModalShell onClose={onClose} title={`Pack order ${order.orderCode}`} wide>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        Scan each device IMEI ({order.items.length})
+      </div>
+      {order.items.map((it) => {
+        const done = scanned.has(it.imeiSerial);
+        return (
+          <div key={it.imeiSerial} style={{ position: "relative", background: "var(--ink)", color: "#fff", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#8891A0" }}>{it.modelName}{it.color ? ` · ${it.color}` : ""}</div>
+                <div className="mono" style={{ fontSize: 16, fontWeight: 600 }}>{it.imeiSerial}</div>
               </div>
-            ))
-          )}
-        </div>
+              {done ? (
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ok)" }}>✓ Matched</span>
+              ) : (
+                <button onClick={() => setScanned((s) => new Set(s).add(it.imeiSerial))} style={{ ...btnPrimary, padding: "7px 12px" }}>📷 Simulate scan</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
 
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Accessories ({order.accessories.length})</div>
-        <div className="space-y-2 mb-2">
-          {order.accessories.length === 0 ? (
-            <div className="text-xs text-slate-400">No accessories on this order.</div>
-          ) : (
-            order.accessories.map((a) => (
-              <label key={a.accessoryRowId} className="flex items-center gap-2.5 border border-slate-200 rounded-lg p-2.5 cursor-pointer">
+      {order.accessories.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Dynamic accessory checklist
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+            {order.accessories.map((a) => (
+              <label key={a.accessoryRowId} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "#fff" }}>
                 <input
                   type="checkbox"
                   checked={checked.has(a.accessoryRowId)}
@@ -208,24 +254,21 @@ function ScanPackModal({
                     });
                   }}
                 />
-                <div className="text-sm">{a.accessoryName}</div>
+                Confirm packed: {a.accessoryName}
               </label>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        </>
+      )}
 
-        {error && <div className="text-sm text-danger mt-3">{error}</div>}
-        <div className="flex gap-2 justify-end mt-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">Cancel</button>
-          <button
-            onClick={complete}
-            disabled={!ready || submitting}
-            className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {submitting ? "Completing…" : "Print label & complete"}
-          </button>
-        </div>
-      </div>
-    </div>
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
+      <button
+        disabled={!allScanned || !allChecked || submitting}
+        onClick={complete}
+        style={{ ...btnPrimary, width: "100%", opacity: !allScanned || !allChecked || submitting ? 0.5 : 1 }}
+      >
+        {submitting ? "Completing…" : "🖨 Print shipping label & complete packing"}
+      </button>
+    </ModalShell>
   );
 }

@@ -23,7 +23,12 @@ export async function GET(req: NextRequest) {
   const pool = getPool();
   const client = await pool.connect();
   try {
-    const itemRes = await client.query(`SELECT * FROM product_items WHERE imei_serial = $1`, [imei]);
+    const itemRes = await client.query(
+      `SELECT pi.*, pv.model_name FROM product_items pi
+       JOIN product_variants pv ON pv.variant_id = pi.variant_id
+       WHERE pi.imei_serial = $1`,
+      [imei]
+    );
     if (itemRes.rowCount === 0) {
       return NextResponse.json({ error: "No device found with that IMEI." }, { status: 404 });
     }

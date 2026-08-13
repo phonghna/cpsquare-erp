@@ -8,6 +8,7 @@ const ALLOWED_TRANSITIONS: Record<string, string> = {
   CHECKIN: "IN_STOCK",
   MEDIA_HOLD: "MEDIA_HOLD",
   RELEASE_HOLD: "IN_STOCK",
+  UNASSIGN: "IN_STOCK",
 };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ imei: string }> }) {
@@ -39,16 +40,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
       return NextResponse.json({ error: "IMEI not found." }, { status: 404 });
     }
     const fromStatus = current.rows[0].status;
+    if (action === "UNASSIGN" && fromStatus !== "RESERVED") {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Only a RESERVED device can be unassigned." }, { status: 409 });
+    }
 
     const location =
-      action === "CHECKOUT_LIVE" ? "Live Room #1" :
-      (action === "CHECKIN" || action === "RELEASE_HOLD") ? "CPSquare Warehouse (TW)" : undefined;
+      action === "CHECKOUT_LIVE" ? `Live Room #${Math.floor(Math.random() * 3) + 1}` :
+      (action === "CHECKIN" || action === "RELEASE_HOLD" || action === "UNASSIGN") ? "CPSquare Warehouse (TW)" : undefined;
 
     await client.query(
       `UPDATE product_items
-       SET status = $1, current_location = COALESCE($2, current_location), updated_by_user_id = $3, updated_at = now()
+       SET status = $1, current_location = COALESCE($2, current_location), order_id = CASE WHEN $5 THEN NULL ELSE order_id END,
+           updated_by_user_id = $3, updated_at = now()
        WHERE imei_serial = $4`,
-      [nextStatus, location ?? null, session.userId, imei]
+      [nextStatus, location ?? null, session.userId, imei, action === "UNASSIGN"]
     );
     await client.query(
       `INSERT INTO imei_logs (log_id, imei_serial, status_from, status_to, performed_by_user_id)

@@ -1,40 +1,63 @@
 "use client";
 
-import { useState } from "react";
-import { StatusPill, STATUS_META, SHIPMENT_META } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { StatusPill, SHIPMENT_META, Card, Field, inputStyle, btnPrimary } from "@/components/ui";
 
-type Item = { imei_serial: string; status: string; current_location: string; variant_id: string };
-type Order = { order_id: string; order_code: string; customer_name: string; shipping_address: string; shipment_status: string; market_code: string };
+type Item = { imeiSerial: string; status: string; currentLocation: string; variantId: string; modelName: string };
+type Order = { orderId: string; orderCode: string; customerName: string; shippingAddress: string; shipmentStatus: string; marketCode: string };
 
 export default function ReturnsPage() {
   const [imei, setImei] = useState("");
   const [item, setItem] = useState<Item | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
+  const [samples, setSamples] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
 
-  async function search() {
-    if (!imei.trim()) return;
+  useEffect(() => {
+    fetch("/api/returns/samples").then((r) => r.json()).then((d) => setSamples(d.imeis || []));
+  }, []);
+
+  async function search(imeiValue?: string) {
+    const q = (imeiValue ?? imei).trim();
+    if (!q) return;
     setSearching(true);
     setError("");
     setDone("");
     setItem(null);
     setOrder(null);
-    const res = await fetch(`/api/returns/lookup?imei=${encodeURIComponent(imei.trim())}`);
+    const res = await fetch(`/api/returns/lookup?imei=${encodeURIComponent(q)}`);
     const data = await res.json();
     setSearching(false);
-    if (!res.ok) { setError(data.error || "Not found."); return; }
-    setItem(data.item);
-    setOrder(data.order);
+    if (!res.ok) { setError(data.error || "No device found with this IMEI."); return; }
+    setItem({
+      imeiSerial: data.item.imei_serial,
+      status: data.item.status,
+      currentLocation: data.item.current_location,
+      variantId: data.item.variant_id,
+      modelName: data.item.model_name,
+    });
+    setOrder(
+      data.order
+        ? {
+            orderId: data.order.order_id,
+            orderCode: data.order.order_code,
+            customerName: data.order.customer_name,
+            shippingAddress: data.order.shipping_address,
+            shipmentStatus: data.order.shipment_status,
+            marketCode: data.order.market_code,
+          }
+        : null
+    );
   }
 
   async function act(action: "RESTOCK" | "REPAIR") {
     if (!item) return;
     setActing(true);
     setError("");
-    const res = await fetch(`/api/returns/${item.imei_serial}/action`, {
+    const res = await fetch(`/api/returns/${item.imeiSerial}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
@@ -42,7 +65,7 @@ export default function ReturnsPage() {
     const data = await res.json();
     setActing(false);
     if (!res.ok) { setError(data.error || "Failed."); return; }
-    setDone(action === "RESTOCK" ? "Re-stocked — device is back IN STOCK." : "Queued for repair — device sent to RMA inspection.");
+    setDone(action === "RESTOCK" ? `IMEI ${item.imeiSerial} re-entered stock.` : `IMEI ${item.imeiSerial} moved to REPAIRING.`);
     setItem(null);
     setOrder(null);
     setImei("");
@@ -50,72 +73,64 @@ export default function ReturnsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-disp text-2xl font-bold">1-Click Returns</h1>
-        <p className="text-sm text-slate-500 mt-1">Scan or type an IMEI to trace its order and process the return.</p>
+      <div className="mb-5">
+        <h1 className="disp text-2xl font-bold">1-Click Returns</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Scan the returned IMEI — the system auto-traces the original order. Resolve with a single click.</p>
       </div>
 
-      <div className="flex gap-2 mb-5 max-w-lg">
-        <input
-          value={imei}
-          onChange={(e) => setImei(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && search()}
-          placeholder="Scan or type IMEI…"
-          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm font-mono"
-        />
-        <button
-          onClick={search}
-          disabled={searching || !imei.trim()}
-          className="px-4 py-2 rounded-lg bg-accent text-white font-semibold text-sm disabled:opacity-50"
-        >
-          {searching ? "Searching…" : "Search"}
-        </button>
-      </div>
+      <Card style={{ padding: 20, maxWidth: 640 }}>
+        <Field label="Scan / enter the returned device's IMEI">
+          <input
+            value={imei}
+            onChange={(e) => setImei(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Enter 15-digit IMEI..."
+            style={inputStyle}
+          />
+        </Field>
 
-      {error && <div className="text-sm text-danger mb-4">{error}</div>}
-      {done && <div className="text-sm text-ok mb-4">{done}</div>}
-
-      {item && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 max-w-lg">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <div className="font-mono font-bold text-lg">{item.imei_serial}</div>
-              <div className="text-sm text-slate-500">{item.variant_id}</div>
-            </div>
-            <StatusPill status={item.status} meta={STATUS_META} />
+        {samples.length > 0 && !item && (
+          <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 8 }}>
+            Try a demo IMEI:{" "}
+            {samples.map((im) => (
+              <span
+                key={im}
+                className="mono"
+                onClick={() => { setImei(im); search(im); }}
+                style={{ cursor: "pointer", color: "var(--accent-dark, var(--accent))", fontWeight: 600, marginRight: 8 }}
+              >
+                {im}
+              </span>
+            ))}
           </div>
+        )}
 
-          {order ? (
-            <div className="text-sm border-t border-slate-100 pt-4 mb-4">
-              <div className="font-semibold font-mono">{order.order_code}</div>
-              <div className="text-slate-500">{order.customer_name} · {order.market_code}</div>
-              <div className="text-slate-500">{order.shipping_address}</div>
-              <div className="text-slate-500 mt-1.5">Current status: <StatusPill status={order.shipment_status} meta={SHIPMENT_META} /></div>
-            </div>
-          ) : (
-            <div className="text-sm text-slate-400 border-t border-slate-100 pt-4 mb-4">
-              No order found for this IMEI — it may never have shipped.
-            </div>
-          )}
+        {error && <div style={{ marginTop: 16, fontSize: 13, color: "var(--danger)" }}>{error}</div>}
+        {done && <div style={{ marginTop: 16, fontSize: 13, color: "var(--ok)" }}>{done}</div>}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => act("RESTOCK")}
-              disabled={acting}
-              className="flex-1 px-4 py-2 rounded-lg bg-ok text-white text-sm font-semibold disabled:opacity-50"
-            >
-              {acting ? "…" : "Re-stock — IN STOCK"}
-            </button>
-            <button
-              onClick={() => act("REPAIR")}
-              disabled={acting}
-              className="flex-1 px-4 py-2 rounded-lg bg-warn text-white text-sm font-semibold disabled:opacity-50"
-            >
-              {acting ? "…" : "Queue for repair — REPAIRING"}
-            </button>
+        {item && (
+          <div style={{ marginTop: 18, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 4 }}>Original order traced</div>
+            <div className="disp" style={{ fontWeight: 700, fontSize: 16 }}>
+              {order ? order.orderCode : "—"}
+              {order && order.shipmentStatus === "DELIVERY_FAILED" && (
+                <span style={{ marginLeft: 8 }}><StatusPill status="DELIVERY_FAILED" meta={SHIPMENT_META} /></span>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>
+              {order ? `${order.customerName} · ${item.modelName}` : item.modelName}
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+              <button onClick={() => act("RESTOCK")} disabled={acting} style={{ ...btnPrimary, background: "var(--ok)", opacity: acting ? 0.6 : 1 }}>
+                {acting ? "…" : "✓ Re-stock — IN STOCK"}
+              </button>
+              <button onClick={() => act("REPAIR")} disabled={acting} style={{ ...btnPrimary, background: "var(--danger)", opacity: acting ? 0.6 : 1 }}>
+                {acting ? "…" : "⚠ Queue for repair — REPAIRING"}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Card>
     </div>
   );
 }
