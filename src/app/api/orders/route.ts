@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { getPool } from "@/lib/db-pool";
 import { orders } from "@/lib/schema";
 import { getSession, canAccessPage } from "@/lib/auth";
@@ -20,6 +20,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const markets = visibleMarkets(session);
+  const db = getDb();
   const rows = await db
     .select()
     .from(orders)

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { orders, productItems } from "@/lib/schema";
 import { sql, inArray, ne } from "drizzle-orm";
 
@@ -19,6 +19,7 @@ export default async function DashboardPage() {
   if (session.role !== "ADMIN" && session.role !== "MANAGER") redirect("/orders");
 
   const markets = visibleMarkets(session);
+  const db = getDb();
 
   const [{ grossRevenue, orderCount }] = await db
     .select({
