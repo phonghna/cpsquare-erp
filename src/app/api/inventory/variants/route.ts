@@ -14,7 +14,7 @@ export async function GET() {
   }
   const db = getDb();
   const rows = await db
-    .select({ variantId: productVariants.variantId, modelName: productVariants.modelName })
+    .select({ variantId: productVariants.variantId, modelName: productVariants.modelName, sellingPriceNtd: productVariants.sellingPriceNtd })
     .from(productVariants)
     .where(eq(productVariants.isSerialized, true))
     .orderBy(productVariants.modelName);

@@ -90,21 +90,42 @@ export default function OrdersPage() {
   );
 }
 
+type Variant = { variantId: string; modelName: string; sellingPriceNtd: string };
+
 function NewOrderModal({
   onClose, onCreated, error, setError,
 }: { onClose: () => void; onCreated: () => void; error: string; setError: (s: string) => void }) {
+  const [variants, setVariants] = useState<Variant[]>([]);
   const [marketCode, setMarketCode] = useState("VN");
   const [salesChannel, setSalesChannel] = useState("TikTok");
-  const [variantId, setVariantId] = useState("IP14PM-256-BLK");
-  const [price, setPrice] = useState(38900);
+  const [variantId, setVariantId] = useState("");
+  const [price, setPrice] = useState(0);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [postalCode, setPostalCode] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
   const [carrierService, setCarrierService] = useState("711");
   const [paymentType, setPaymentType] = useState("COD");
   const [downpayment, setDownpayment] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/inventory/variants");
+      const data = await res.json();
+      const list: Variant[] = data.variants || [];
+      setVariants(list);
+      if (list[0]) {
+        setVariantId(list[0].variantId);
+        setPrice(Number(list[0].sellingPriceNtd));
+      }
+    })();
+  }, []);
+
+  function onVariantChange(id: string) {
+    setVariantId(id);
+    const v = variants.find((x) => x.variantId === id);
+    if (v) setPrice(Number(v.sellingPriceNtd));
+  }
 
   async function submit() {
     setSubmitting(true);
@@ -114,7 +135,7 @@ function NewOrderModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         marketCode, salesChannel, variantId, price, customerName, customerPhone,
-        postalCode, shippingAddress, carrierService, paymentType, downpayment,
+        shippingAddress, carrierService, paymentType, downpayment,
       }),
     });
     const data = await res.json();
@@ -138,8 +159,12 @@ function NewOrderModal({
               {["TikTok", "Facebook", "Line"].map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="SKU (variant_id)" full>
-            <input value={variantId} onChange={(e) => setVariantId(e.target.value)} className="input" />
+          <Field label="Phone model (SKU)" full>
+            <select value={variantId} onChange={(e) => onVariantChange(e.target.value)} className="input">
+              {variants.map((v) => (
+                <option key={v.variantId} value={v.variantId}>{v.modelName} — {v.variantId}</option>
+              ))}
+            </select>
           </Field>
           <Field label="Price (NTD)">
             <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} className="input" />
@@ -152,11 +177,8 @@ function NewOrderModal({
           <Field label="Customer name" full>
             <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
           </Field>
-          <Field label="Phone">
+          <Field label="Phone" full>
             <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-          </Field>
-          <Field label="Postal code">
-            <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} className="input" />
           </Field>
           <Field label="Shipping address" full>
             <input value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} className="input" />
@@ -175,7 +197,7 @@ function NewOrderModal({
         {error && <div className="text-sm text-danger mt-3">{error}</div>}
         <div className="flex gap-2 justify-end mt-5">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-sm">Cancel</button>
-          <button onClick={submit} disabled={submitting} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50">
+          <button onClick={submit} disabled={submitting || !variantId} className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold disabled:opacity-50">
             {submitting ? "Creating…" : "Confirm & Lock Price"}
           </button>
         </div>
