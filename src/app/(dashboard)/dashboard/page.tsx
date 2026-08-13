@@ -6,6 +6,16 @@ import { sql, inArray, ne, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+const STATUS_COLORS: Record<string, string> = {
+  IN_STOCK: "var(--ok)",
+  CHECKED_OUT_LIVE: "var(--info)",
+  RESERVED: "var(--warn)",
+  PACKING: "var(--violet)",
+  SHIPPED: "var(--teal2)",
+  REPAIRING: "var(--danger)",
+  MEDIA_HOLD: "#B45309",
+};
+
 function visibleMarkets(session: { role: string; markets: string[] }) {
   if (session.role === "ADMIN" || session.role === "PACKING" || session.role === "TECH") {
     return ["VN", "ID", "TH", "PH"];
@@ -69,7 +79,13 @@ export default async function DashboardPage() {
         </Card>
         <Card title="Real asset location (TW central pool)">
           {byStatus.map((s) => (
-            <Bar key={s.status} label={s.status} value={Number(s.count)} max={Math.max(1, ...byStatus.map((x) => Number(x.count)))} />
+            <Bar
+              key={s.status}
+              label={s.status}
+              value={Number(s.count)}
+              max={Math.max(1, ...byStatus.map((x) => Number(x.count)))}
+              color={STATUS_COLORS[s.status] || "var(--accent)"}
+            />
           ))}
         </Card>
       </div>
@@ -94,7 +110,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     </div>
   );
 }
-function Bar({ label, value, max }: { label: string; value: number; max: number }) {
+function Bar({ label, value, max, color }: { label: string; value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.max(3, (value / max) * 100) : 0;
   return (
     <div className="mb-3">
@@ -103,7 +119,7 @@ function Bar({ label, value, max }: { label: string; value: number; max: number 
         <span className="font-mono text-slate-500">{value}</span>
       </div>
       <div className="h-2 bg-paper rounded overflow-hidden">
-        <div className="h-full bg-accent rounded" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded" style={{ width: `${pct}%`, background: color || "var(--accent)" }} />
       </div>
     </div>
   );

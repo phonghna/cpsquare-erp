@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusPill, PRIORITY_META } from "@/components/ui";
 
 type Announcement = {
   announcementId: string;
@@ -71,7 +72,7 @@ export default function AnnouncementsPage() {
               {items.map((a) => (
                 <tr key={a.announcementId} className="border-b border-slate-100">
                   <td className="p-3 font-semibold">{a.title}</td>
-                  <td className="p-3">{a.priority}</td>
+                  <td className="p-3"><StatusPill status={a.priority} meta={PRIORITY_META} /></td>
                   <td className="p-3">{a.targetMarkets}</td>
                   <td className="p-3 text-slate-500 text-xs">
                     {new Date(a.startDatetime).toLocaleString()} → {new Date(a.expirationDatetime).toLocaleString()}

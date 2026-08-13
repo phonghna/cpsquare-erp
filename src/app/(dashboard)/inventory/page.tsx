@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusPill, STATUS_META } from "@/components/ui";
 
 type Item = {
   imeiSerial: string;
@@ -81,7 +82,7 @@ export default function InventoryPage() {
                   <td className="p-3">{i.variantId}</td>
                   <td className="p-3">{i.batteryHealth ?? "—"}%</td>
                   <td className="p-3 text-slate-500">{i.currentLocation}</td>
-                  <td className="p-3">{i.status}</td>
+                  <td className="p-3"><StatusPill status={i.status} meta={STATUS_META} /></td>
                   <td className="p-3 space-x-2">
                     {canOperate && i.status === "IN_STOCK" && (
                       <>

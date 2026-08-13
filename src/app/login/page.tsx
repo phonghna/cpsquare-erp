@@ -35,15 +35,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-ink px-4">
-      <div className="w-full max-w-sm bg-white rounded-xl p-8 shadow-xl">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--ink)" }}>
+      <div className="w-full max-w-sm rounded-xl p-8" style={{ background: "var(--panel)", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         <div className="flex items-center gap-2.5 mb-1.5">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-            <span className="font-disp font-bold text-ink text-sm">CP</span>
+          <div className="w-[34px] h-[34px] rounded-[9px] flex items-center justify-center" style={{ background: "var(--accent)" }}>
+            <span className="disp font-bold text-sm" style={{ color: "var(--ink)" }}>CP</span>
           </div>
-          <div className="font-disp text-lg font-bold">CPSquare ERP</div>
+          <div className="disp text-lg font-bold">CPSquare ERP</div>
         </div>
-        <p className="text-sm text-slate-500 mb-6">Sign in with your company account.</p>
+        <p className="text-[13px] mb-6" style={{ color: "var(--text-dim)" }}>Secure sign-in. Role, markets and team are resolved from your account.</p>
 
         <form onSubmit={submit} className="space-y-4">
           <div>

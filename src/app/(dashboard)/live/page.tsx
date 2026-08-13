@@ -81,7 +81,10 @@ export default function LivePage() {
                 ) : (
                   byMarket[m].map((item) => (
                     <div key={item.imeiSerial} className="p-3 border-b border-slate-100">
-                      <div className="font-mono text-sm">{item.imeiSerial}</div>
+                      <div className="flex items-center gap-1.5 font-mono text-sm">
+                        <span className="live-dot inline-block w-1.5 h-1.5 rounded-full" style={{ background: "var(--info)" }} />
+                        {item.imeiSerial}
+                      </div>
                       <div className="text-[11px] text-slate-500 mb-2">{item.variantId}</div>
                       <button
                         onClick={() => checkin(item.imeiSerial)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusPill, SHIPMENT_META } from "@/components/ui";
 
 type Order = {
   orderId: string;
@@ -69,7 +70,7 @@ export default function OrdersPage() {
                   <td className="p-3">{o.salesChannel}</td>
                   <td className="p-3">{o.customerName}</td>
                   <td className="p-3 font-mono">{fmt(o.totalInvoiceAmountNtd)}</td>
-                  <td className="p-3">{o.shipmentStatus}</td>
+                  <td className="p-3"><StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} /></td>
                 </tr>
               ))}
             </tbody>

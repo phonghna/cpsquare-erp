@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { StatusPill, SHIPMENT_META } from "@/components/ui";
 
 type Order = {
   orderId: string;
@@ -244,7 +245,7 @@ export default function TrackingPage() {
                         <td className="p-3">{o.customerName}</td>
                         <td className="p-3 font-mono">{o.trackingNumber || "—"}</td>
                         <td className="p-3 text-slate-500">{o.shippedAt ? new Date(o.shippedAt).toLocaleDateString() : "—"}</td>
-                        <td className="p-3">{o.shipmentStatus}</td>
+                        <td className="p-3"><StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} /></td>
                         <td className="p-3">
                           {o.shipmentStatus === "SHIPPED" && (
                             <button

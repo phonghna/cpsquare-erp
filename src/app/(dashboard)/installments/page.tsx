@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { StatusPill, INSTALLMENT_META } from "@/components/ui";
 
 type Schedule = {
   scheduleId: string;
@@ -113,7 +114,7 @@ export default function InstallmentsPage() {
                   <td className={`p-3 ${isOverdue(s) ? "text-danger font-semibold" : "text-slate-500"}`}>
                     {new Date(s.dueDate).toLocaleDateString()}
                   </td>
-                  <td className="p-3">{s.status}</td>
+                  <td className="p-3"><StatusPill status={s.status} meta={INSTALLMENT_META} /></td>
                   <td className="p-3 space-x-2 whitespace-nowrap">
                     {s.status === "PENDING" && (
                       <>

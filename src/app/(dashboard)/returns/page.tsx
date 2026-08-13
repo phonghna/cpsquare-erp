@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { StatusPill, STATUS_META, SHIPMENT_META } from "@/components/ui";
 
 type Item = { imei_serial: string; status: string; current_location: string; variant_id: string };
 type Order = { order_id: string; order_code: string; customer_name: string; shipping_address: string; shipment_status: string; market_code: string };
@@ -81,7 +82,7 @@ export default function ReturnsPage() {
               <div className="font-mono font-bold text-lg">{item.imei_serial}</div>
               <div className="text-sm text-slate-500">{item.variant_id}</div>
             </div>
-            <div className="text-xs px-2 py-1 rounded-md bg-slate-100 font-semibold">{item.status}</div>
+            <StatusPill status={item.status} meta={STATUS_META} />
           </div>
 
           {order ? (
@@ -89,7 +90,7 @@ export default function ReturnsPage() {
               <div className="font-semibold font-mono">{order.order_code}</div>
               <div className="text-slate-500">{order.customer_name} · {order.market_code}</div>
               <div className="text-slate-500">{order.shipping_address}</div>
-              <div className="text-slate-500 mt-1">Current status: {order.shipment_status}</div>
+              <div className="text-slate-500 mt-1.5">Current status: <StatusPill status={order.shipment_status} meta={SHIPMENT_META} /></div>
             </div>
           ) : (
             <div className="text-sm text-slate-400 border-t border-slate-100 pt-4 mb-4">

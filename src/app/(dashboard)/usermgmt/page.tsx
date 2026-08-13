@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusPill } from "@/components/ui";
 
 type User = {
   userId: string;
@@ -87,9 +88,10 @@ export default function UserMgmtPage() {
                   <td className="p-3 text-slate-500">{u.markets.length === 4 ? "All" : u.markets.join(", ") || "—"}</td>
                   <td className="p-3 text-slate-500">{u.teamAllocation || "—"}</td>
                   <td className="p-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-md font-semibold ${u.isActive ? "bg-ok/10 text-ok" : "bg-slate-100 text-slate-500"}`}>
-                      {u.isActive ? "Active" : "Deactivated"}
-                    </span>
+                    <StatusPill
+                      status={u.isActive ? "ACTIVE" : "DEACTIVATED"}
+                      meta={{ ACTIVE: { label: "Active", color: "var(--ok)", bg: "var(--ok-bg)" }, DEACTIVATED: { label: "Deactivated", color: "var(--text-dim)", bg: "var(--gray-bg)" } }}
+                    />
                   </td>
                   <td className="p-3 space-x-2 whitespace-nowrap">
                     <button onClick={() => setEditing(u)} className="px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold">Edit</button>

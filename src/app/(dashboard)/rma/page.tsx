@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { RMA_STAGE_META } from "@/components/ui";
 
 type Item = { imeiSerial: string; variantId: string; rmaStage: string; cosmeticCondition: string | null };
 
@@ -60,7 +61,10 @@ export default function RmaPage() {
           {STAGES.map((s) => (
             <div key={s.key} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
               <div className="p-3 border-b border-slate-200">
-                <div className="font-disp font-bold text-sm">{s.label}</div>
+                <div className="font-disp font-bold text-sm flex items-center gap-1.5">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: RMA_STAGE_META[s.key]?.color }} />
+                  {s.label}
+                </div>
                 <div className="text-[11px] text-slate-500">{byStage[s.key].length} device(s)</div>
               </div>
               <div>
