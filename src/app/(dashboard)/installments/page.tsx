@@ -17,6 +17,12 @@ type Schedule = {
   remainingBalanceNtd: string;
 };
 
+type MissingSchedule = {
+  orderId: string; orderCode: string; customerName: string; marketCode: string;
+  totalInvoiceAmountNtd: string; downpaymentReceivedNtd: string; remainingBalanceNtd: string;
+  installmentTermMonths: number | null; reason: string | null;
+};
+
 type DunningLog = {
   logId: string;
   scheduleId: string;
@@ -41,11 +47,14 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-US");
 export default function InstallmentsPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [dunningLogs, setDunningLogs] = useState<DunningLog[]>([]);
+  const [missingSchedules, setMissingSchedules] = useState<MissingSchedule[]>([]);
+  const [canGenerate, setCanGenerate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overdue");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [dunningTarget, setDunningTarget] = useState<Schedule | null>(null);
+  const [generateError, setGenerateError] = useState<Record<string, string>>({});
 
   async function load() {
     setLoading(true);
@@ -53,9 +62,21 @@ export default function InstallmentsPage() {
     const data = await res.json();
     setSchedules(data.schedules || []);
     setDunningLogs(data.dunningLogs || []);
+    setMissingSchedules(data.missingSchedules || []);
+    setCanGenerate(!!data.canGenerate);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
+
+  async function generateSchedule(orderId: string) {
+    setBusy(orderId);
+    setGenerateError((e) => ({ ...e, [orderId]: "" }));
+    const res = await fetch(`/api/installments/${orderId}/generate-schedule`, { method: "POST" });
+    const data = await res.json();
+    setBusy(null);
+    if (!res.ok) { setGenerateError((e) => ({ ...e, [orderId]: data.error || "Failed to generate schedule." })); return; }
+    load();
+  }
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const in5Days = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + 5); return d; }, [today]);
@@ -148,6 +169,50 @@ export default function InstallmentsPage() {
             <KPI label="Due within 5 days" value={String(dueSoon.length)} sub={fmt(String(dueSoon.reduce((s, r) => s + Number(r.amountDueNtd), 0))) + " upcoming"} accent="var(--warn)" />
             <KPI label="All open schedules" value={String(openCount)} sub={`${instOrderCount} installment orders`} />
           </div>
+
+          {missingSchedules.length > 0 && (
+            <Card style={{ padding: 0, overflow: "hidden", marginBottom: 20, border: "1px solid var(--warn)" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--warn-bg)" }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Needs a schedule ({missingSchedules.length})</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>
+                  Delivered as Installment but no payment schedule exists yet — usually because the term or remaining balance was missing at delivery time.
+                </div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Market</th><th style={th}>Total</th><th style={th}>Downpayment</th><th style={th}>Remaining</th><th style={th}>Term</th><th style={th}>Why it's missing</th><th style={th}></th></tr>
+                  </thead>
+                  <tbody>
+                    {missingSchedules.map((m) => (
+                      <tr key={m.orderId}>
+                        <td style={{ ...td, fontWeight: 700 }} className="mono">{m.orderCode}</td>
+                        <td style={td}>{m.customerName}</td>
+                        <td style={td}>{m.marketCode}</td>
+                        <td style={td} className="mono">{fmt(m.totalInvoiceAmountNtd)}</td>
+                        <td style={td} className="mono">{fmt(m.downpaymentReceivedNtd)}</td>
+                        <td style={td} className="mono">{fmt(m.remainingBalanceNtd)}</td>
+                        <td style={td}>{m.installmentTermMonths ? `${m.installmentTermMonths} months` : "—"}</td>
+                        <td style={{ ...td, color: "var(--danger)" }}>{m.reason || "—"}</td>
+                        <td style={td}>
+                          {canGenerate ? (
+                            <>
+                              <button onClick={() => generateSchedule(m.orderId)} disabled={!!m.reason || busy === m.orderId} style={{ ...btnPrimary, opacity: m.reason || busy === m.orderId ? 0.5 : 1 }}>
+                                {busy === m.orderId ? "…" : "Generate schedule"}
+                              </button>
+                              {generateError[m.orderId] && <div style={{ color: "var(--danger)", fontSize: 11.5, marginTop: 4, maxWidth: 200 }}>{generateError[m.orderId]}</div>}
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>Admin/Manager only</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           <Tabs
             tabs={[

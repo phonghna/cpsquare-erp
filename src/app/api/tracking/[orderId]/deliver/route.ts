@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db-pool";
 import { getSession, canAccessPage } from "@/lib/auth";
 import { randomUUID } from "crypto";
+import { insertInstallmentSchedule } from "@/lib/installments";
 
 // Mark delivered: SHIPPED -> DELIVERED. If the order is an INSTALLMENT-type
 // order, this is also where its payment_schedules rows get generated for the
@@ -42,35 +43,29 @@ export async function POST(_req: Request, { params }: { params: Promise<{ orderI
     );
 
     let generatedSchedule = false;
-    if (order.payment_type === "INSTALLMENT" && order.installment_term_months > 0) {
-      const termMonths = Number(order.installment_term_months);
-      const totalCents = Math.round(Number(order.remaining_balance_ntd) * 100);
-      if (totalCents > 0) {
-        const baseCents = Math.floor(totalCents / termMonths);
-        const remainderCents = totalCents - baseCents * termMonths;
-        const deliveryDate = new Date();
-
-        for (let period = 1; period <= termMonths; period++) {
-          const amountCents = baseCents + (period === termMonths ? remainderCents : 0);
-          const dueDate = new Date(deliveryDate);
-          dueDate.setDate(dueDate.getDate() + 30 * period);
-          await client.query(
-            `INSERT INTO payment_schedules (schedule_id, order_id, period_number, amount_due_ntd, due_date, status)
-             VALUES ($1,$2,$3,$4,$5,'PENDING')`,
-            [randomUUID(), orderId, period, (amountCents / 100).toFixed(2), dueDate.toISOString().slice(0, 10)]
-          );
-        }
-        generatedSchedule = true;
+    let scheduleWarning: string | null = null;
+    if (order.payment_type === "INSTALLMENT") {
+      const result = await insertInstallmentSchedule(client, orderId, order.remaining_balance_ntd, order.installment_term_months);
+      generatedSchedule = result.generated;
+      if (result.generated) {
         await client.query(
           `INSERT INTO order_logs (log_id, order_id, action_type, performed_by_user_id, note)
            VALUES ($1,$2,'INSTALLMENT_SCHEDULE_GENERATED',$3,$4)`,
-          [randomUUID(), orderId, session.userId, `${termMonths} period(s), total ${(totalCents / 100).toFixed(2)} NTD`]
+          [randomUUID(), orderId, session.userId, `${result.periods} period(s), total ${result.totalNtd.toFixed(2)} NTD`]
         );
+      } else {
+        // Don't fail the delivery over this — but don't fail silently either.
+        // The CS/Manager needs to know right away, not discover an empty
+        // Installment Debt Board later. They can fix it from the board's
+        // "Needs a schedule" panel once the order data is corrected.
+        scheduleWarning = !(Number(order.installment_term_months) > 0)
+          ? "This is an Installment order but no installment term is set — no schedule was generated. Edit the order to set a term, then use \"Generate schedule\" on the Installment Debt Board."
+          : "This Installment order has no remaining balance to schedule (fully covered by the downpayment) — no schedule was generated.";
       }
     }
 
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, generatedSchedule });
+    return NextResponse.json({ ok: true, generatedSchedule, scheduleWarning });
   } catch (err: any) {
     await client.query("ROLLBACK");
     return NextResponse.json({ error: err.message || "Failed to mark delivered." }, { status: 500 });

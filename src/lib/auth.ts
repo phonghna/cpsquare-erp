@@ -100,6 +100,12 @@ export function canSetSensitiveInventoryStatus(role: string): boolean {
   return role === "ADMIN" || role === "MANAGER";
 }
 
+// Retroactively generating a missing installment schedule touches money —
+// same tier as the sensitive inventory statuses.
+export function canGenerateInstallmentSchedule(role: string): boolean {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
 // Drives the market picker in User Management: ADMIN/PACKING/TECH always
 // serve every market so their user_market_access rows are all 4, fixed;
 // MANAGER gets a multi-select of an assigned subset; CS/STREAMER get exactly

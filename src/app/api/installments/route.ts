@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { orders, paymentSchedules } from "@/lib/schema";
-import { getSession, canAccessPage } from "@/lib/auth";
+import { getSession, canAccessPage, canGenerateInstallmentSchedule } from "@/lib/auth";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 function visibleMarkets(session: { role: string; markets: string[] }) {
@@ -25,7 +25,7 @@ export async function GET() {
     .where(and(eq(orders.paymentType, "INSTALLMENT"), inArray(orders.marketCode, markets)));
 
   if (installmentOrders.length === 0) {
-    return NextResponse.json({ schedules: [] });
+    return NextResponse.json({ schedules: [], missingSchedules: [], canGenerate: canGenerateInstallmentSchedule(session.role) });
   }
   const orderIds = installmentOrders.map((o) => o.orderId);
   const ordersById = new Map(installmentOrders.map((o) => [o.orderId, o]));
@@ -34,6 +34,29 @@ export async function GET() {
     .select()
     .from(paymentSchedules)
     .where(inArray(paymentSchedules.orderId, orderIds));
+
+  // DELIVERED Installment orders that never got a payment_schedules row —
+  // e.g. the order's installment term or remaining balance was missing/zero
+  // at delivery time. Surfaced here (rather than staying silently invisible)
+  // so Admin/Manager can fix the order data and retroactively generate one.
+  const orderIdsWithSchedule = new Set(schedules.map((s) => s.orderId));
+  const missingSchedules = installmentOrders
+    .filter((o) => o.shipmentStatus === "DELIVERED" && !orderIdsWithSchedule.has(o.orderId))
+    .map((o) => ({
+      orderId: o.orderId,
+      orderCode: o.orderCode,
+      customerName: o.customerName,
+      marketCode: o.marketCode,
+      totalInvoiceAmountNtd: o.totalInvoiceAmountNtd,
+      downpaymentReceivedNtd: o.downpaymentReceivedNtd,
+      remainingBalanceNtd: o.remainingBalanceNtd,
+      installmentTermMonths: o.installmentTermMonths,
+      reason: !(Number(o.installmentTermMonths) > 0)
+        ? "No installment term set"
+        : !(Number(o.remainingBalanceNtd) > 0)
+        ? "No remaining balance (fully covered by downpayment)"
+        : null,
+    }));
 
   const result = schedules.map((s) => {
     const o = ordersById.get(s.orderId)!;
@@ -73,5 +96,5 @@ export async function GET() {
     }));
   }
 
-  return NextResponse.json({ schedules: result, dunningLogs });
+  return NextResponse.json({ schedules: result, dunningLogs, missingSchedules, canGenerate: canGenerateInstallmentSchedule(session.role) });
 }

@@ -123,6 +123,7 @@ export default function TrackingPage() {
     const data = await res.json();
     setRowBusy(null);
     if (!res.ok) { setError(data.error || "Failed to mark delivered."); return; }
+    if (data.scheduleWarning) setError(data.scheduleWarning);
     load();
   }
 
