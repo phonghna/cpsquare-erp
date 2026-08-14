@@ -33,36 +33,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
     return NextResponse.json({ error: "At least one market is required for this role." }, { status: 400 });
   }
 
+  // Single atomic statement: update + clear old market rows + insert new
+  // ones, all in one CTE query instead of separate round-trips. Splitting
+  // this across multiple queries over a pooled WebSocket connection could
+  // intermittently land on a different backend session mid-transaction.
   const pool = getPool();
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    const existing = await client.query(`SELECT user_id FROM app_users WHERE user_id = $1 FOR UPDATE`, [userId]);
-    if (!existing.rowCount) {
-      await client.query("ROLLBACK");
+    const result = await pool.query(
+      `WITH upd AS (
+         UPDATE app_users SET display_name = $1, role = $2, team_allocation = $3,
+           require_password_change = COALESCE($4, require_password_change), updated_at = now()
+         WHERE user_id = $5
+         RETURNING user_id
+       ), del AS (
+         DELETE FROM user_market_access WHERE user_id = $5
+       )
+       INSERT INTO user_market_access (user_id, market_code)
+       SELECT user_id, m FROM upd, unnest($6::text[]) AS m
+       RETURNING user_id`,
+      [displayName, role, resolvedTeam, requirePasswordChange ?? null, userId, resolvedMarkets]
+    );
+    if (result.rowCount === 0) {
       return NextResponse.json({ error: "This account no longer exists — reload the page and try again." }, { status: 404 });
     }
-
-    await client.query(
-      `UPDATE app_users SET display_name = $1, role = $2, team_allocation = $3,
-         require_password_change = COALESCE($4, require_password_change), updated_at = now()
-       WHERE user_id = $5`,
-      [displayName, role, resolvedTeam, requirePasswordChange ?? null, userId]
-    );
-    await client.query(`DELETE FROM user_market_access WHERE user_id = $1`, [userId]);
-    for (const marketCode of resolvedMarkets) {
-      await client.query(`INSERT INTO user_market_access (user_id, market_code) VALUES ($1,$2)`, [userId, marketCode]);
-    }
-    await client.query("COMMIT");
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    await client.query("ROLLBACK");
-    const msg = String(err?.message || "");
-    const friendly = msg.includes("user_market_access_user_id_fkey")
-      ? "This account's data is inconsistent (likely left over from an earlier bug) — deactivate it and create a fresh account instead."
-      : msg || "Failed to update user.";
-    return NextResponse.json({ error: friendly }, { status: 500 });
-  } finally {
-    client.release();
+    return NextResponse.json({ error: err?.message || "Failed to update user." }, { status: 500 });
   }
 }

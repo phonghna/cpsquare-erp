@@ -65,32 +65,31 @@ export async function POST(req: NextRequest) {
   const userId = randomUUID();
   const passwordHash = await hashPassword(password);
 
-  // Transactional so the user row and its market-access rows are always
-  // created together — a partial failure previously left a user with no
-  // markets (shown as "—" in the console) and no error surfaced to the UI.
+  // Single atomic statement (one CTE query) instead of separate
+  // BEGIN/INSERT/INSERT/COMMIT round-trips. Splitting this across multiple
+  // queries over a pooled WebSocket connection was intermittently landing on
+  // different backend sessions mid-transaction, so the second insert
+  // couldn't see the first — leaving a user with no market access, or (as
+  // seen in testing) failing outright with a foreign-key error on a
+  // brand-new account. A single statement can't be split like that.
   const pool = getPool();
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    const existing = await client.query(`SELECT user_id FROM app_users WHERE username = $1 FOR UPDATE`, [usernameLower]);
-    if (existing.rowCount && existing.rowCount > 0) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: `Username "${usernameLower}" is already taken.` }, { status: 409 });
-    }
-    await client.query(
-      `INSERT INTO app_users (user_id, username, display_name, password_hash, role, team_allocation, require_password_change)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [userId, usernameLower, displayName, passwordHash, role, resolvedTeam, !!requirePasswordChange]
+    await pool.query(
+      `WITH ins_user AS (
+         INSERT INTO app_users (user_id, username, display_name, password_hash, role, team_allocation, require_password_change)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING user_id
+       )
+       INSERT INTO user_market_access (user_id, market_code)
+       SELECT user_id, m FROM ins_user, unnest($8::text[]) AS m`,
+      [userId, usernameLower, displayName, passwordHash, role, resolvedTeam, !!requirePasswordChange, resolvedMarkets]
     );
-    for (const marketCode of resolvedMarkets) {
-      await client.query(`INSERT INTO user_market_access (user_id, market_code) VALUES ($1,$2)`, [userId, marketCode]);
-    }
-    await client.query("COMMIT");
     return NextResponse.json({ ok: true, userId });
   } catch (err: any) {
-    await client.query("ROLLBACK");
-    return NextResponse.json({ error: err.message || "Failed to create user." }, { status: 500 });
-  } finally {
-    client.release();
+    const msg = String(err?.message || "");
+    if (err?.code === "23505" || msg.toLowerCase().includes("app_users_username")) {
+      return NextResponse.json({ error: `Username "${usernameLower}" is already taken.` }, { status: 409 });
+    }
+    return NextResponse.json({ error: msg || "Failed to create user." }, { status: 500 });
   }
 }
