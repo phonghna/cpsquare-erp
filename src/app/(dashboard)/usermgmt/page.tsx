@@ -147,13 +147,30 @@ function UserFormModal({
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [role, setRole] = useState(user?.role || "CS");
   const [team, setTeam] = useState(user?.teamAllocation || "");
-  const [markets, setMarkets] = useState<string[]>(user?.markets || []);
+  // For a brand-new user whose role defaults to a single-market scope (CS),
+  // the "Assigned market" dropdown visually shows "Vietnam (VN)" via a
+  // display-only fallback — but unless this state is actually seeded to
+  // match, the underlying markets array stays empty and Create/Save is
+  // silently disabled since nothing was ever "selected". Seed it up front.
+  const [markets, setMarkets] = useState<string[]>(() => {
+    if (user?.markets && user.markets.length > 0) return user.markets;
+    const initialScope = ROLE_SCOPE[user?.role || "CS"] || "SINGLE";
+    return initialScope === "SINGLE" ? ["VN"] : [];
+  });
   const [password, setPassword] = useState(genPassword());
   const [requirePasswordChange, setRequirePasswordChange] = useState(user?.requirePasswordChange ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const scope = ROLE_SCOPE[role] || "SINGLE";
+
+  function handleRoleChange(newRole: string) {
+    setRole(newRole);
+    const newScope = ROLE_SCOPE[newRole] || "SINGLE";
+    if (newScope === "SINGLE") {
+      setMarkets((prev) => (prev.length === 1 && MARKETS.some((m) => m.code === prev[0]) ? prev : ["VN"]));
+    }
+  }
 
   function toggleMarket(m: string) {
     if (scope === "SINGLE") { setMarkets([m]); return; }
@@ -174,11 +191,7 @@ function UserFormModal({
       });
       let data: any = {};
       try { data = await res.json(); } catch { /* non-JSON error body — fall through with generic message */ }
-      if (!res.ok) {
-        const diag = data._diagnostic ? ` — ${JSON.stringify(data._diagnostic)}` : "";
-        setError((data.error || `Failed to save (HTTP ${res.status}).`) + diag);
-        return;
-      }
+      if (!res.ok) { setError(data.error || `Failed to save (HTTP ${res.status}).`); return; }
       onSaved();
     } catch (err: any) {
       setError(err?.message || "Network error — please try again.");
@@ -201,7 +214,7 @@ function UserFormModal({
         )}
         <Field label="Display name" full><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={inputStyle} /></Field>
         <Field label="Role" full>
-          <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
+          <select value={role} onChange={(e) => handleRoleChange(e.target.value)} style={inputStyle}>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </Field>
@@ -210,7 +223,7 @@ function UserFormModal({
       {scope === "SINGLE" && (
         <div style={{ marginTop: 12 }}>
           <Field label="Assigned market">
-            <select value={markets[0] || "VN"} onChange={(e) => setMarkets([e.target.value])} style={inputStyle}>
+            <select value={markets[0] ?? "VN"} onChange={(e) => setMarkets([e.target.value])} style={inputStyle}>
               {MARKETS.map((m) => <option key={m.code} value={m.code}>{m.name} ({m.code})</option>)}
             </select>
           </Field>
