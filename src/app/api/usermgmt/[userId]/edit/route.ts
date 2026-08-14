@@ -27,6 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
   if (!ROLES.includes(role)) {
     return NextResponse.json({ error: "Invalid role." }, { status: 400 });
   }
+  const resolvedTeam = role === "ADMIN" ? "Global" : (team || null);
   const resolvedMarkets = resolveMarkets(role, markets);
   if (resolvedMarkets.length === 0) {
     return NextResponse.json({ error: "At least one market is required for this role." }, { status: 400 });
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       `UPDATE app_users SET display_name = $1, role = $2, team_allocation = $3,
          require_password_change = COALESCE($4, require_password_change), updated_at = now()
        WHERE user_id = $5`,
-      [displayName, role, team || null, requirePasswordChange ?? null, userId]
+      [displayName, role, resolvedTeam, requirePasswordChange ?? null, userId]
     );
     await client.query(`DELETE FROM user_market_access WHERE user_id = $1`, [userId]);
     for (const marketCode of resolvedMarkets) {

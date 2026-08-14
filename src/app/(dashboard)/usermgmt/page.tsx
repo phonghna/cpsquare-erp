@@ -57,11 +57,17 @@ export default function UserMgmtPage() {
   async function toggleActive(userId: string) {
     setBusyId(userId);
     setError("");
-    const res = await fetch(`/api/usermgmt/${userId}/toggle-active`, { method: "POST" });
-    const data = await res.json();
-    setBusyId(null);
-    if (!res.ok) { setError(data.error || "Failed."); return; }
-    load();
+    try {
+      const res = await fetch(`/api/usermgmt/${userId}/toggle-active`, { method: "POST" });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* ignore non-JSON error body */ }
+      if (!res.ok) { setError(data.error || `Failed (HTTP ${res.status}).`); return; }
+      load();
+    } catch (err: any) {
+      setError(err?.message || "Network error — please try again.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (
@@ -94,7 +100,7 @@ export default function UserMgmtPage() {
                     <td style={td} className="mono">{u.username}</td>
                     <td style={td}>{u.displayName}</td>
                     <td style={td}><span style={{ fontWeight: 700 }}>{u.role}</span></td>
-                    <td style={td}>{u.markets.length === 4 ? "All" : u.markets.join(", ") || "—"}</td>
+                    <td style={td}>{u.role === "ADMIN" ? "Global" : u.markets.length === 4 ? "All" : u.markets.join(", ") || "—"}</td>
                     <td style={td}>{u.teamAllocation || "—"}</td>
                     <td style={td}><StatusPill status={u.isActive ? "ACTIVE" : "DEACTIVATED"} meta={ACTIVE_META} /></td>
                     <td style={td}>
@@ -158,17 +164,23 @@ function UserFormModal({
     setSubmitting(true);
     setError("");
     const url = mode === "create" ? "/api/usermgmt" : `/api/usermgmt/${user!.userId}/edit`;
-    const body: any = { displayName, role, team: team || null, markets, requirePasswordChange };
+    const body: any = { displayName, role, team: role === "ADMIN" ? "Global" : (team || null), markets, requirePasswordChange };
     if (mode === "create") { body.username = username; body.password = password; }
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (!res.ok) { setError(data.error || "Failed to save."); return; }
-    onSaved();
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON error body — fall through with generic message */ }
+      if (!res.ok) { setError(data.error || `Failed to save (HTTP ${res.status}).`); return; }
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message || "Network error — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const canSubmit =
@@ -214,7 +226,9 @@ function UserFormModal({
       )}
       {scope === "ALL" && <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--text-faint)" }}>This role always sees all 4 markets (shared TW queue).</div>}
 
-      {role !== "PACKING" && role !== "TECH" && (
+      {role === "ADMIN" ? (
+        <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--text-faint)" }}>Team is always <strong style={{ color: "var(--text-dim)" }}>Global</strong> for Admin accounts.</div>
+      ) : role !== "PACKING" && role !== "TECH" && (
         <div style={{ marginTop: 12 }}>
           <Field label="Team allocation">
             <select value={team} onChange={(e) => setTeam(e.target.value)} style={inputStyle}>
@@ -260,15 +274,21 @@ function ResetPasswordModal({
   async function submit() {
     setSubmitting(true);
     setError("");
-    const res = await fetch(`/api/usermgmt/${user.userId}/reset-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (!res.ok) { setError(data.error || "Failed."); return; }
-    onDone();
+    try {
+      const res = await fetch(`/api/usermgmt/${user.userId}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* ignore non-JSON error body */ }
+      if (!res.ok) { setError(data.error || `Failed (HTTP ${res.status}).`); return; }
+      onDone();
+    } catch (err: any) {
+      setError(err?.message || "Network error — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
