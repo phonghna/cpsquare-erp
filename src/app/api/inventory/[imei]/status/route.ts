@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
     await client.query(
       `UPDATE product_items
        SET status = $1, current_location = COALESCE($2, current_location), order_id = CASE WHEN $5 THEN NULL ELSE order_id END,
-           updated_by_user_id = $3, updated_at = now()
+           updated_by_user_id = $3, updated_at = now(), status_updated_at = now()
        WHERE imei_serial = $4`,
       [nextStatus, location ?? null, session.userId, imei, action === "UNASSIGN"]
     );

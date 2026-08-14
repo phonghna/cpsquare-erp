@@ -93,6 +93,13 @@ export function canOperateInventory(role: string): boolean {
   return role !== "CS";
 }
 
+// Setting a device to MISSING or WHOLESALE is a loss/sale-reporting action —
+// more sensitive than a normal Check-out/Check-in, so it's restricted to
+// Admin and Manager only (the "Set status" override on Inventory rows).
+export function canSetSensitiveInventoryStatus(role: string): boolean {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
 // Drives the market picker in User Management: ADMIN/PACKING/TECH always
 // serve every market so their user_market_access rows are all 4, fixed;
 // MANAGER gets a multi-select of an assigned subset; CS/STREAMER get exactly

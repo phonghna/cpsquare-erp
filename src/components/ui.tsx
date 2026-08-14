@@ -12,6 +12,8 @@ export const STATUS_META: Record<string, { label: string; color: string; bg: str
   SHIPPED: { label: "Shipped", color: "var(--teal2)", bg: "var(--teal2-bg)" },
   REPAIRING: { label: "Repairing", color: "var(--danger)", bg: "var(--danger-bg)" },
   MEDIA_HOLD: { label: "Media Hold", color: "#B45309", bg: "#FDF0DD" },
+  MISSING: { label: "Missing", color: "var(--danger)", bg: "var(--danger-bg)" },
+  WHOLESALE: { label: "Wholesale", color: "var(--gray)", bg: "var(--gray-bg)" },
 };
 
 export const SHIPMENT_META: Record<string, { label: string; color: string; bg: string }> = {

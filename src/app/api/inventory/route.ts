@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { productItems, productVariants, imeiLogs, orders } from "@/lib/schema";
-import { getSession, canAccessPage } from "@/lib/auth";
+import { getSession, canAccessPage, canSetSensitiveInventoryStatus } from "@/lib/auth";
 import { desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -34,7 +34,12 @@ export async function GET() {
     order: i.orderId ? orderById.get(i.orderId) || null : null,
   }));
 
-  return NextResponse.json({ items: result, canManage: canManageInventory(session.role), isAdmin: session.role === "ADMIN" });
+  return NextResponse.json({
+    items: result,
+    canManage: canManageInventory(session.role),
+    canSetStatus: canSetSensitiveInventoryStatus(session.role),
+    isAdmin: session.role === "ADMIN",
+  });
 }
 
 // Receive a single new IMEI unit into stock (IN_STOCK, central warehouse).

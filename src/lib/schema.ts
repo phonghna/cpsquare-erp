@@ -68,6 +68,13 @@ export const productItems = pgTable("product_items", {
   currentLocation: text("current_location").notNull().default("CPSquare Warehouse (TW)"),
   orderId: text("order_id"),
   rmaStage: text("rma_stage"),
+  // Free-text context for a status change — mandatory (enforced in the API)
+  // when status is set to MISSING or WHOLESALE, e.g. "Last seen at Live Room
+  // #2, unaccounted for after Aug 20 stocktake".
+  remark: text("remark"),
+  // Stamped to now() by the API every time `status` changes (not on any row
+  // update) — powers the "sorted by most recently edited" Reserved board.
+  statusUpdatedAt: timestamp("status_updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedByUserId: text("updated_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

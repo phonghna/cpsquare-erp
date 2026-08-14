@@ -10,6 +10,7 @@ import SearchCombobox from "@/components/SearchCombobox";
 type Item = {
   imeiSerial: string; variantId: string; status: string; currentLocation: string;
   batteryHealth: number | null; cosmeticCondition: string | null; orderId: string | null;
+  remark: string | null; statusUpdatedAt: string;
   variant: { variantId: string; modelName: string; color: string | null } | null;
   order: { orderCode: string; customerName: string; customerSocialHandle: string | null; marketCode: string } | null;
 };
@@ -17,20 +18,44 @@ type Variant = { variantId: string; modelName: string; color: string | null; sel
 
 const fmt = (n: string | number) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
 
+const AVAILABLE_STATUSES = ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD"];
+const RESERVED_STATUSES = ["RESERVED", "PACKING", "SHIPPED", "MISSING", "WHOLESALE"];
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "IN_STOCK", label: "In Stock" },
+  { value: "CHECKED_OUT_LIVE", label: "Checked-out Live" },
+  { value: "MEDIA_HOLD", label: "Media Hold" },
+  { value: "RESERVED", label: "Reserved" },
+  { value: "PACKING", label: "In Packing" },
+  { value: "SHIPPED", label: "Shipped" },
+  { value: "MISSING", label: "Missing" },
+  { value: "WHOLESALE", label: "Wholesale" },
+];
+const SET_STATUS_OPTIONS = [
+  { value: "IN_STOCK", label: "In Stock" },
+  { value: "CHECKED_OUT_LIVE", label: "Checked-out Live" },
+  { value: "MEDIA_HOLD", label: "Media Hold" },
+  { value: "MISSING", label: "Missing" },
+  { value: "WHOLESALE", label: "Wholesale" },
+];
+
 export default function InventoryPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [loading, setLoading] = useState(true);
   const [canOperate, setCanOperate] = useState(true);
   const [canManage, setCanManage] = useState(false);
+  const [canSetStatus, setCanSetStatus] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState("available");
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [statusTarget, setStatusTarget] = useState<Item | null>(null);
 
   async function load() {
     setLoading(true);
@@ -39,10 +64,16 @@ export default function InventoryPage() {
     const varData = await varRes.json();
     setItems(invData.items || []);
     setCanManage(!!invData.canManage);
+    setCanSetStatus(!!invData.canSetStatus);
     setVariants(varData.variants || []);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
+
+  function pickStatusFilter(v: string) {
+    setStatusFilter(v);
+    if (v) setTab(AVAILABLE_STATUSES.includes(v) ? "available" : "reserved");
+  }
 
   async function act(imei: string, action: string) {
     setBusy(imei);
@@ -67,12 +98,14 @@ export default function InventoryPage() {
   }
 
   const available = useMemo(
-    () => items.filter((i) => ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD"].includes(i.status) && matches(i, q)),
-    [items, q]
+    () => items.filter((i) => AVAILABLE_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && matches(i, q)),
+    [items, q, statusFilter]
   );
   const reserved = useMemo(
-    () => items.filter((i) => ["RESERVED", "PACKING", "SHIPPED"].includes(i.status) && matches(i, q)),
-    [items, q]
+    () => items
+      .filter((i) => RESERVED_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && matches(i, q))
+      .sort((a, b) => new Date(b.statusUpdatedAt).getTime() - new Date(a.statusUpdatedAt).getTime()),
+    [items, q, statusFilter]
   );
 
   function matches(i: Item, query: string) {
@@ -103,8 +136,11 @@ export default function InventoryPage() {
         active={tab}
         onChange={setTab}
       />
-      <div className="mb-4">
+      <div className="mb-4 flex gap-2 flex-wrap">
         <input placeholder="Search by IMEI or product name..." value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, maxWidth: 300 }} />
+        <select value={statusFilter} onChange={(e) => pickStatusFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 190 }}>
+          {STATUS_FILTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
 
       {loading ? (
@@ -134,6 +170,9 @@ export default function InventoryPage() {
                         {canOperate && i.status === "CHECKED_OUT_LIVE" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>Check-in shelf</ActionBtn>}
                         {canOperate && i.status === "MEDIA_HOLD" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>}
                         {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
+                        {canSetStatus && (
+                          <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>
+                        )}
                         {canManage && i.status === "IN_STOCK" && (
                           <button onClick={() => { setDeleteError(""); setDeleteTarget(i); }} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
                         )}
@@ -154,13 +193,23 @@ export default function InventoryPage() {
                 <tbody>
                   {reserved.map((i) => (
                     <tr key={i.imeiSerial}>
-                      <td style={td} className="mono">{i.imeiSerial}</td>
+                      <td style={td}>
+                        <div className="mono">{i.imeiSerial}</div>
+                        {i.remark && (
+                          <div title={i.remark} style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {i.remark}
+                          </div>
+                        )}
+                      </td>
                       <td style={td}>{i.variant?.modelName} · {i.variant?.color}</td>
                       <td style={{ ...td, fontWeight: 700 }} className="mono">{i.order?.orderCode || "—"}</td>
                       <td style={td}>{i.order ? `${i.order.customerName}${i.order.customerSocialHandle ? ` (${i.order.customerSocialHandle})` : ""}` : "—"}</td>
                       <td style={td}>{i.order?.marketCode || "—"}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
-                      <td style={td}>{canOperate && i.status === "RESERVED" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>Unassign / Return to shelf</ActionBtn>}</td>
+                      <td style={td}>
+                        {canOperate && i.status === "RESERVED" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>Unassign / Return to shelf</ActionBtn>}
+                        {canSetStatus && <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -187,7 +236,61 @@ export default function InventoryPage() {
           onClose={() => setDeleteTarget(null)}
         />
       )}
+      {statusTarget && (
+        <SetStatusModal item={statusTarget} onClose={() => setStatusTarget(null)} onSaved={() => { setStatusTarget(null); load(); }} />
+      )}
     </div>
+  );
+}
+
+function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () => void; onSaved: () => void }) {
+  const [status, setStatus] = useState(item.status && SET_STATUS_OPTIONS.some((o) => o.value === item.status) ? item.status : "IN_STOCK");
+  const [remark, setRemark] = useState(item.remark || "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const remarkRequired = status === "MISSING" || status === "WHOLESALE";
+
+  async function submit() {
+    if (remarkRequired && !remark.trim()) return;
+    setSubmitting(true);
+    setError("");
+    const res = await fetch(`/api/inventory/${item.imeiSerial}/set-status`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, remark }),
+    });
+    const data = await res.json();
+    setSubmitting(false);
+    if (!res.ok) { setError(data.error || "Failed to update status."); return; }
+    onSaved();
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Set Status">
+      <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 12 }}>
+        <span className="mono">{item.imeiSerial}</span> — {item.variant?.modelName || "Unknown model"}
+      </div>
+      <Field label="Status">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+          {SET_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label={`Remark${remarkRequired ? " (required)" : " (optional)"}`}>
+        <textarea
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          rows={3}
+          placeholder={remarkRequired ? "e.g. Last seen at Live Room #2, unaccounted for after Aug 20 stocktake" : "Optional note"}
+          style={{ ...inputStyle, resize: "vertical" }}
+        />
+      </Field>
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>Cancel</button>
+        <button onClick={submit} disabled={submitting || (remarkRequired && !remark.trim())} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+          {submitting ? "Saving…" : "Save status"}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
