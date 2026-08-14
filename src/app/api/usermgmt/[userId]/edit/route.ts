@@ -38,9 +38,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
   try {
     await client.query("BEGIN");
     const existing = await client.query(`SELECT user_id FROM app_users WHERE user_id = $1 FOR UPDATE`, [userId]);
-    if (existing.rowCount === 0) {
+    if (!existing.rowCount) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "User not found." }, { status: 404 });
+      return NextResponse.json({ error: "This account no longer exists — reload the page and try again." }, { status: 404 });
     }
 
     await client.query(
@@ -57,7 +57,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     await client.query("ROLLBACK");
-    return NextResponse.json({ error: err.message || "Failed to update user." }, { status: 500 });
+    const msg = String(err?.message || "");
+    const friendly = msg.includes("user_market_access_user_id_fkey")
+      ? "This account's data is inconsistent (likely left over from an earlier bug) — deactivate it and create a fresh account instead."
+      : msg || "Failed to update user.";
+    return NextResponse.json({ error: friendly }, { status: 500 });
   } finally {
     client.release();
   }

@@ -17,9 +17,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ userId
   try {
     await client.query("BEGIN");
     const current = await client.query(`SELECT is_active FROM app_users WHERE user_id = $1 FOR UPDATE`, [userId]);
-    if (current.rowCount === 0) {
+    if (!current.rowCount) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "User not found." }, { status: 404 });
+      return NextResponse.json({ error: "This account no longer exists — reload the page and try again." }, { status: 404 });
     }
     const next = !current.rows[0].is_active;
     await client.query(`UPDATE app_users SET is_active = $1, updated_at = now() WHERE user_id = $2`, [next, userId]);
