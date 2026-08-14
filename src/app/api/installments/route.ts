@@ -74,13 +74,19 @@ export async function GET() {
     const scheduleIds = schedules.map((s) => s.scheduleId);
     let dunningLogs: any[] = [];
     if (scheduleIds.length > 0) {
+      // Build an explicit IN (...) list rather than `= ANY(${scheduleIds})`
+      // — the neon-http driver doesn't reliably bind a JS array as a single
+      // parameter through the sql tagged template (throws "op ANY/ALL
+      // (array) requires array on right side" at runtime), so we sidestep
+      // that entirely with a comma-joined list of individually-bound params.
+      const idList = sql.join(scheduleIds.map((id) => sql`${id}`), sql`, `);
       const rows = await db.execute(sql`
         SELECT l.log_id, l.schedule_id, l.contact_channel, l.dunning_result, l.promised_payment_date, l.cs_notes, l.created_at,
                u.display_name AS performed_by, ps.order_id
         FROM installment_dunning_logs l
         JOIN app_users u ON u.user_id = l.performed_by_user_id
         JOIN payment_schedules ps ON ps.schedule_id = l.schedule_id
-        WHERE l.schedule_id = ANY(${scheduleIds})
+        WHERE l.schedule_id IN (${idList})
         ORDER BY l.created_at DESC
       `);
       dunningLogs = (rows as any).rows ?? rows;
