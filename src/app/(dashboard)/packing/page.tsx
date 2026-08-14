@@ -210,7 +210,7 @@ function PackScanModal({
         return next;
       });
     } else {
-      setScanErrors((e) => ({ ...e, [expectedImei]: `Mã quét được (${cleaned}) không khớp IMEI của đơn hàng.` }));
+      setScanErrors((e) => ({ ...e, [expectedImei]: `Scanned code (${cleaned}) doesn't match this order's IMEI.` }));
     }
   }
 
