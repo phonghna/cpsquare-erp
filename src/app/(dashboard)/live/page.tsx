@@ -4,18 +4,21 @@ import { useEffect, useState } from "react";
 import { Card, btnPrimary, btnGhost } from "@/components/ui";
 
 type Item = { imeiSerial: string; variant: { modelName: string } | null };
-type ByMarket = Record<string, Item[]>;
+type ByRoom = Record<string, Item[]>;
 
-const MARKETS = [
+const ROOMS = [
+  { code: "ADMIN", name: "Admin" },
   { code: "VN", name: "Vietnam" },
   { code: "ID", name: "Indonesia" },
   { code: "TH", name: "Thailand" },
   { code: "PH", name: "Philippines" },
 ];
 
+const EMPTY_ROOMS: ByRoom = { ADMIN: [], VN: [], ID: [], TH: [], PH: [] };
+
 export default function LivePage() {
-  const [byMarket, setByMarket] = useState<ByMarket>({ VN: [], ID: [], TH: [], PH: [] });
-  const [myMarket, setMyMarket] = useState<string | null>(null);
+  const [byRoom, setByRoom] = useState<ByRoom>(EMPTY_ROOMS);
+  const [myRoom, setMyRoom] = useState<string | null>(null);
   const [role, setRole] = useState("");
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -26,8 +29,8 @@ export default function LivePage() {
     setLoading(true);
     const res = await fetch("/api/live");
     const data = await res.json();
-    setByMarket(data.byMarket || { VN: [], ID: [], TH: [], PH: [] });
-    setMyMarket(data.myMarket || null);
+    setByRoom(data.byRoom || EMPTY_ROOMS);
+    setMyRoom(data.myRoom || null);
     setRole(data.role || "");
     setLoading(false);
   }
@@ -53,14 +56,14 @@ export default function LivePage() {
     load();
   }
 
-  const canZeroClick = role === "CS" || role === "STREAMER";
+  const canZeroClick = role === "CS" || role === "STREAMER" || role === "MANAGER" || role === "ADMIN";
 
   return (
     <div>
       <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
         <div>
           <h1 className="disp text-2xl font-bold">Livestream Rotation</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Four market blocks fed from one central TW pool.</p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Admin room plus four market rooms, fed from one central TW pool.</p>
         </div>
         {canZeroClick && (
           <button onClick={checkout} disabled={checkingOut} style={{ ...btnPrimary, opacity: checkingOut ? 0.6 : 1 }}>
@@ -75,13 +78,13 @@ export default function LivePage() {
         <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
-          {MARKETS.map((m) => {
-            const items = byMarket[m.code] || [];
-            const isMine = m.code === myMarket;
+          {ROOMS.map((m) => {
+            const items = byRoom[m.code] || [];
+            const isMine = m.code === myRoom;
             return (
               <Card key={m.code} style={{ padding: 16, border: isMine ? "2px solid var(--accent)" : "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div className="disp" style={{ fontWeight: 700, fontSize: 14 }}>{m.name} Market</div>
+                  <div className="disp" style={{ fontWeight: 700, fontSize: 14 }}>{m.code === "ADMIN" ? "Admin" : `${m.name} Market`}</div>
                   <span className="live-dot" style={{ fontSize: 11, fontWeight: 700, color: "var(--info)" }}>● LIVE {items.length}</span>
                 </div>
                 {items.length === 0 && <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No devices checked out.</div>}

@@ -7,11 +7,26 @@ import { eq } from "drizzle-orm";
 export const MARKET_NAMES: Record<string, string> = { VN: "Vietnam", ID: "Indonesia", TH: "Thailand", PH: "Philippines" };
 const MARKETS = ["VN", "ID", "TH", "PH"];
 
-export function liveRoomFor(market: string) {
-  return `Live Room · ${MARKET_NAMES[market]}`;
+// Manager/CS/Streamer accounts are routed to a livestream room by their team
+// allocation, not by their raw market list — this gives every account a
+// single, unambiguous room regardless of how many markets they can see.
+export const TEAM_MARKET: Record<string, string> = { DZ: "ID", DZV: "VN", DZG: "PH", DZT: "TH" };
+
+// Resolves which room (key + display label) an account's check-outs belong
+// in. Admins always get their own dedicated room. Everyone else is routed by
+// team_allocation via TEAM_MARKET. Returns null if the account's team
+// doesn't map to any known room (e.g. Packing/Tech, or no team set).
+export function roomFor(role: string, team: string | null): { key: string; label: string } | null {
+  if (role === "ADMIN") return { key: "ADMIN", label: "Admin" };
+  const marketCode = team ? TEAM_MARKET[team] : undefined;
+  if (marketCode) return { key: marketCode, label: MARKET_NAMES[marketCode] };
+  return null;
 }
 
-// All devices currently checked out to a live room, grouped by market.
+const ROOM_KEYS = ["ADMIN", "VN", "ID", "TH", "PH"];
+const ROOM_LABELS: Record<string, string> = { ADMIN: "Admin", ...MARKET_NAMES };
+
+// All devices currently checked out to a live room, grouped by room.
 export async function GET() {
   const session = await getSession();
   if (!session || !canAccessPage(session.role, "live")) {
@@ -22,12 +37,12 @@ export async function GET() {
   const variants = await db.select({ variantId: productVariants.variantId, modelName: productVariants.modelName }).from(productVariants);
   const variantById = new Map(variants.map((v) => [v.variantId, v]));
 
-  const byMarket: Record<string, any[]> = { VN: [], ID: [], TH: [], PH: [] };
+  const byRoom: Record<string, any[]> = { ADMIN: [], VN: [], ID: [], TH: [], PH: [] };
   for (const row of rows) {
-    const market = MARKETS.find((m) => row.currentLocation.includes(MARKET_NAMES[m]));
-    if (market) byMarket[market].push({ ...row, variant: variantById.get(row.variantId) || null });
+    const key = ROOM_KEYS.find((k) => row.currentLocation === ROOM_LABELS[k]);
+    if (key) byRoom[key].push({ ...row, variant: variantById.get(row.variantId) || null });
   }
 
-  const myMarket = session.markets.length === 1 ? session.markets[0] : null;
-  return NextResponse.json({ byMarket, myMarket, role: session.role });
+  const myRoom = roomFor(session.role, session.team)?.key || null;
+  return NextResponse.json({ byRoom, myRoom, role: session.role, team: session.team });
 }

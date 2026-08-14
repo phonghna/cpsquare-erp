@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db-pool";
 import { getSession, canAccessPage, canOperateInventory } from "@/lib/auth";
 import { randomUUID } from "crypto";
+import { roomFor } from "@/app/api/live/route";
 
 const ALLOWED_TRANSITIONS: Record<string, string> = {
   CHECKOUT_LIVE: "CHECKED_OUT_LIVE",
@@ -45,8 +46,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
       return NextResponse.json({ error: "Only a RESERVED device can be unassigned." }, { status: 409 });
     }
 
+    if (action === "CHECKOUT_LIVE" && !roomFor(session.role, session.team)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Your account isn't assigned to a team that maps to a livestream room." }, { status: 400 });
+    }
+
+    // Live check-outs are routed to a market/Admin room by the caller's own
+    // role/team — same rule the Livestream Rotation page uses — so this
+    // Inventory-board shortcut and the dedicated Live Rotation check-out
+    // button always agree on where a device lands.
     const location =
-      action === "CHECKOUT_LIVE" ? `Live Room #${Math.floor(Math.random() * 3) + 1}` :
+      action === "CHECKOUT_LIVE" ? roomFor(session.role, session.team)!.label :
       (action === "CHECKIN" || action === "RELEASE_HOLD" || action === "UNASSIGN") ? "CPSquare Warehouse (TW)" : undefined;
 
     await client.query(
