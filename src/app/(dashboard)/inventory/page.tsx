@@ -67,16 +67,25 @@ export default function InventoryPage() {
   const [transferring, setTransferring] = useState(false);
   const [transferError, setTransferError] = useState("");
 
+  const [loadError, setLoadError] = useState("");
+
   async function load() {
     setLoading(true);
-    const [invRes, varRes] = await Promise.all([fetch("/api/inventory"), fetch("/api/inventory/variants")]);
-    const invData = await invRes.json();
-    const varData = await varRes.json();
-    setItems(invData.items || []);
-    setCanManage(!!invData.canManage);
-    setCanSetStatus(!!invData.canSetStatus);
-    setVariants(varData.variants || []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const [invRes, varRes] = await Promise.all([fetch("/api/inventory"), fetch("/api/inventory/variants")]);
+      const invData = await invRes.json().catch(() => ({}));
+      const varData = await varRes.json().catch(() => ({}));
+      if (!invRes.ok) { setLoadError(invData.error || `Failed to load inventory (HTTP ${invRes.status}).`); return; }
+      setItems(invData.items || []);
+      setCanManage(!!invData.canManage);
+      setCanSetStatus(!!invData.canSetStatus);
+      setVariants(varData.variants || []);
+    } catch (err: any) {
+      setLoadError(err?.message || "Network error — failed to load inventory.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -196,6 +205,8 @@ export default function InventoryPage() {
           {WAREHOUSE_FILTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
+
+      {loadError && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{loadError}</div>}
 
       {tab === "available" && selected.size > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", marginBottom: 12, borderRadius: 10, background: "var(--accent-bg)", border: "1px solid var(--accent)" }}>

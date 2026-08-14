@@ -50,13 +50,21 @@ export default function PackingPage() {
   const [orders, setOrders] = useState<PackingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<PackingOrder | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/packing");
-    const data = await res.json();
-    setOrders(data.orders || []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/packing");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setLoadError(data.error || `Failed to load packing queue (HTTP ${res.status}).`); return; }
+      setOrders(data.orders || []);
+    } catch (err: any) {
+      setLoadError(err?.message || "Network error — failed to load packing queue.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -136,6 +144,8 @@ export default function PackingPage() {
           <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>Orders grouped into carrier buckets. Each order shows a dynamic checklist built from exactly what was selected at intake.</p>
         </div>
       </div>
+
+      {loadError && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{loadError}</div>}
 
       {loading ? (
         <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>

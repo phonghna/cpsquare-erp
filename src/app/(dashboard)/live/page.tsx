@@ -27,12 +27,19 @@ export default function LivePage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/live");
-    const data = await res.json();
-    setByRoom(data.byRoom || EMPTY_ROOMS);
-    setMyRoom(data.myRoom || null);
-    setRole(data.role || "");
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/live");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load Live Rotation (HTTP ${res.status}).`); return; }
+      setByRoom(data.byRoom || EMPTY_ROOMS);
+      setMyRoom(data.myRoom || null);
+      setRole(data.role || "");
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load Live Rotation.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

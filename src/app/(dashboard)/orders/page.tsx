@@ -40,11 +40,18 @@ export default function OrdersPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/orders");
-    const data = await res.json();
-    setOrders(data.orders || []);
-    setRole(data.role || "");
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/orders");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load orders (HTTP ${res.status}).`); return; }
+      setOrders(data.orders || []);
+      setRole(data.role || "");
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load orders.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

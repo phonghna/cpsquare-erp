@@ -35,12 +35,19 @@ export default function PriceBookPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/pricebook");
-    const data = await res.json();
-    setVariants(data.variants || []);
-    setCanEdit(!!data.canEdit);
-    setPriceLogs(data.priceLogs || []);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/pricebook");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load Price Book (HTTP ${res.status}).`); return; }
+      setVariants(data.variants || []);
+      setCanEdit(!!data.canEdit);
+      setPriceLogs(data.priceLogs || []);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load Price Book.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

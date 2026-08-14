@@ -47,10 +47,17 @@ export default function UserMgmtPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/usermgmt");
-    const data = await res.json();
-    setUsers(data.users || []);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/usermgmt");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load users (HTTP ${res.status}).`); return; }
+      setUsers(data.users || []);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load users.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

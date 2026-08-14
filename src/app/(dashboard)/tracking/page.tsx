@@ -42,11 +42,18 @@ export default function TrackingPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/tracking");
-    const data = await res.json();
-    setAwaiting(data.awaitingTracking || []);
-    setShipped(data.shippedOrDelivered || []);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/tracking");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load tracking (HTTP ${res.status}).`); return; }
+      setAwaiting(data.awaitingTracking || []);
+      setShipped(data.shippedOrDelivered || []);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load tracking.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -119,12 +126,19 @@ export default function TrackingPage() {
   async function markDelivered(orderId: string) {
     setRowBusy(orderId);
     setError("");
-    const res = await fetch(`/api/tracking/${orderId}/deliver`, { method: "POST" });
-    const data = await res.json();
-    setRowBusy(null);
-    if (!res.ok) { setError(data.error || "Failed to mark delivered."); return; }
-    if (data.scheduleWarning) setError(data.scheduleWarning);
-    load();
+    try {
+      const res = await fetch(`/api/tracking/${orderId}/deliver`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to mark delivered (HTTP ${res.status}).`); return; }
+      // load() clears `error` at its start, so set the warning AFTER it
+      // resolves — otherwise it would be wiped out before ever being seen.
+      await load();
+      if (data.scheduleWarning) setError(data.scheduleWarning);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to mark delivered.");
+    } finally {
+      setRowBusy(null);
+    }
   }
 
   async function bulkAssign() {

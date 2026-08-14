@@ -22,13 +22,20 @@ export default function AccessoriesPage() {
 
   async function load() {
     setLoading(true);
-    const [accRes, varRes] = await Promise.all([fetch("/api/accessories"), fetch("/api/inventory/variants")]);
-    const accData = await accRes.json();
-    const varData = await varRes.json();
-    setItems(accData.accessories || []);
-    setCanManage(!!accData.canManage);
-    setModelGroups(Array.from(new Set((varData.variants || []).map((v: any) => v.modelGroup))) as string[]);
-    setLoading(false);
+    setError("");
+    try {
+      const [accRes, varRes] = await Promise.all([fetch("/api/accessories"), fetch("/api/inventory/variants")]);
+      const accData = await accRes.json().catch(() => ({}));
+      const varData = await varRes.json().catch(() => ({}));
+      if (!accRes.ok) { setError(accData.error || `Failed to load accessories (HTTP ${accRes.status}).`); return; }
+      setItems(accData.accessories || []);
+      setCanManage(!!accData.canManage);
+      setModelGroups(Array.from(new Set((varData.variants || []).map((v: any) => v.modelGroup))) as string[]);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load accessories.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

@@ -28,47 +28,57 @@ export default function ReturnsPage() {
     setDone("");
     setItem(null);
     setOrder(null);
-    const res = await fetch(`/api/returns/lookup?imei=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    setSearching(false);
-    if (!res.ok) { setError(data.error || "No device found with this IMEI."); return; }
-    setItem({
-      imeiSerial: data.item.imei_serial,
-      status: data.item.status,
-      currentLocation: data.item.current_location,
-      variantId: data.item.variant_id,
-      modelName: data.item.model_name,
-    });
-    setOrder(
-      data.order
-        ? {
-            orderId: data.order.order_id,
-            orderCode: data.order.order_code,
-            customerName: data.order.customer_name,
-            shippingAddress: data.order.shipping_address,
-            shipmentStatus: data.order.shipment_status,
-            marketCode: data.order.market_code,
-          }
-        : null
-    );
+    try {
+      const res = await fetch(`/api/returns/lookup?imei=${encodeURIComponent(q)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "No device found with this IMEI."); return; }
+      setItem({
+        imeiSerial: data.item.imei_serial,
+        status: data.item.status,
+        currentLocation: data.item.current_location,
+        variantId: data.item.variant_id,
+        modelName: data.item.model_name,
+      });
+      setOrder(
+        data.order
+          ? {
+              orderId: data.order.order_id,
+              orderCode: data.order.order_code,
+              customerName: data.order.customer_name,
+              shippingAddress: data.order.shipping_address,
+              shipmentStatus: data.order.shipment_status,
+              marketCode: data.order.market_code,
+            }
+          : null
+      );
+    } catch (err: any) {
+      setError(err?.message || "Network error — search failed.");
+    } finally {
+      setSearching(false);
+    }
   }
 
   async function act(action: "RESTOCK" | "REPAIR") {
     if (!item) return;
     setActing(true);
     setError("");
-    const res = await fetch(`/api/returns/${item.imeiSerial}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    const data = await res.json();
-    setActing(false);
-    if (!res.ok) { setError(data.error || "Failed."); return; }
-    setDone(action === "RESTOCK" ? `IMEI ${item.imeiSerial} re-entered stock.` : `IMEI ${item.imeiSerial} moved to REPAIRING.`);
-    setItem(null);
-    setOrder(null);
-    setImei("");
+    try {
+      const res = await fetch(`/api/returns/${item.imeiSerial}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "Failed."); return; }
+      setDone(action === "RESTOCK" ? `IMEI ${item.imeiSerial} re-entered stock.` : `IMEI ${item.imeiSerial} moved to REPAIRING.`);
+      setItem(null);
+      setOrder(null);
+      setImei("");
+    } catch (err: any) {
+      setError(err?.message || "Network error — action failed.");
+    } finally {
+      setActing(false);
+    }
   }
 
   return (

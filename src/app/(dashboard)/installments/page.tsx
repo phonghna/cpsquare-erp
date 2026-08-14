@@ -58,13 +58,21 @@ export default function InstallmentsPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/installments");
-    const data = await res.json();
-    setSchedules(data.schedules || []);
-    setDunningLogs(data.dunningLogs || []);
-    setMissingSchedules(data.missingSchedules || []);
-    setCanGenerate(!!data.canGenerate);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/installments");
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON error response */ }
+      if (!res.ok) { setError(data.error || `Failed to load installments (HTTP ${res.status}).`); return; }
+      setSchedules(data.schedules || []);
+      setDunningLogs(data.dunningLogs || []);
+      setMissingSchedules(data.missingSchedules || []);
+      setCanGenerate(!!data.canGenerate);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load installments.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

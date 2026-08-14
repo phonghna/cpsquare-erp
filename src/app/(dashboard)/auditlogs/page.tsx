@@ -18,14 +18,22 @@ export default function AuditLogsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("order");
   const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/auditlogs");
-      const data = await res.json();
-      setOrderLogs((data.orderLogs || []).map(camelizeOrderLog));
-      setImeiLogs((data.imeiLogs || []).map(camelizeImeiLog));
-      setLoading(false);
+      setError("");
+      try {
+        const res = await fetch("/api/auditlogs");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { setError(data.error || `Failed to load audit logs (HTTP ${res.status}).`); return; }
+        setOrderLogs((data.orderLogs || []).map(camelizeOrderLog));
+        setImeiLogs((data.imeiLogs || []).map(camelizeImeiLog));
+      } catch (err: any) {
+        setError(err?.message || "Network error — failed to load audit logs.");
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -54,6 +62,8 @@ export default function AuditLogsPage() {
         onChange={setTab}
       />
       <input placeholder="Search order code, IMEI, or action..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320, marginBottom: 16 }} />
+
+      {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
       {loading ? (
         <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>

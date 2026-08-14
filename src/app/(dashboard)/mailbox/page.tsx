@@ -17,14 +17,22 @@ export default function MailboxPage() {
   const [replyTo, setReplyTo] = useState<InboxMsg | null>(null);
   const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/mailbox");
-    const data = await res.json();
-    setInbox(data.inbox || []);
-    setSent(data.sent || []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/mailbox");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setLoadError(data.error || `Failed to load mailbox (HTTP ${res.status}).`); return; }
+      setInbox(data.inbox || []);
+      setSent(data.sent || []);
+    } catch (err: any) {
+      setLoadError(err?.message || "Network error — failed to load mailbox.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -62,6 +70,8 @@ export default function MailboxPage() {
         </div>
         <button onClick={() => { setReplyTo(null); setShowCompose(true); }} style={btnPrimary}>✎ Compose</button>
       </div>
+
+      {loadError && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{loadError}</div>}
 
       <Card style={{ padding: 0, overflow: "hidden", display: "flex", minHeight: 440 }}>
         <div style={{ width: "30%", minWidth: 220, borderRight: "1px solid var(--border)" }}>

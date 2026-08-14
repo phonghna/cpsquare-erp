@@ -15,10 +15,17 @@ export default function RmaPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/rma");
-    const data = await res.json();
-    setItems(data.items || []);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/rma");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load RMA queue (HTTP ${res.status}).`); return; }
+      setItems(data.items || []);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load RMA queue.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 

@@ -69,10 +69,17 @@ export default function AnnouncementsPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/announcements");
-    const data = await res.json();
-    setItems(data.announcements || []);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/announcements");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to load announcements (HTTP ${res.status}).`); return; }
+      setItems(data.announcements || []);
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to load announcements.");
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { load(); }, []);
 
