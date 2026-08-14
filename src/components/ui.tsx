@@ -150,6 +150,28 @@ export function ModalShell({ title, children, onClose, wide }: { title: string; 
   );
 }
 
+export function ConfirmModal({
+  title, message, confirmLabel = "Delete", danger = true, busy, onConfirm, onClose,
+}: {
+  title: string; message: React.ReactNode; confirmLabel?: string; danger?: boolean; busy?: boolean;
+  onConfirm: () => void; onClose: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,18,23,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+        <div className="disp" style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5 }}>{message}</div>
+        <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={btnGhost}>Cancel</button>
+          <button onClick={onConfirm} disabled={busy} style={{ ...(danger ? btnDanger : btnPrimary), padding: "9px 16px", opacity: busy ? 0.6 : 1 }}>
+            {busy ? "…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: 8, border: "1px solid var(--border)", fontSize: 13.5, background: "#fff", color: "var(--text)" };
 export const btnPrimary: React.CSSProperties = { padding: "9px 16px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" };
 export const btnGhost: React.CSSProperties = { padding: "7px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "#fff", color: "var(--text)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" };
@@ -157,13 +179,16 @@ export const btnDanger: React.CSSProperties = { padding: "7px 12px", borderRadiu
 
 export const BRANDS = ["Apple", "Samsung", "Google", "Xiaomi", "OPPO", "Vivo", "Other"];
 
-export type VariantDraft = { brand: string; modelName: string; storage: string; color: string; price: number };
+export type VariantDraft = { sku: string; brand: string; modelName: string; storage: string; color: string; price: number };
 
 export function VariantDraftFields({ draft, setDraft }: { draft: VariantDraft; setDraft: (d: VariantDraft) => void }) {
   return (
     <div style={{ border: "1px dashed var(--accent)", borderRadius: 8, padding: 12, background: "var(--accent-bg)", marginTop: 8 }}>
       <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--accent-dark)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>New model details</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <Field label="SKU" full>
+          <input value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value.toUpperCase() })} placeholder="e.g. IP15PRO-256-BLU" className="mono" style={inputStyle} />
+        </Field>
         <Field label="Brand">
           <select value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} style={inputStyle}>
             {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}

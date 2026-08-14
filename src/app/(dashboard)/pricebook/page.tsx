@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, Empty, ModalShell, inputStyle, btnPrimary, btnGhost, tableStyle, th, td, VariantDraftFields, VariantDraft } from "@/components/ui";
+import { Card, Empty, ModalShell, ConfirmModal, inputStyle, btnPrimary, btnGhost, tableStyle, th, td, VariantDraftFields, VariantDraft } from "@/components/ui";
 
 type Variant = {
   variantId: string;
@@ -27,6 +27,10 @@ export default function PriceBookPage() {
   const [editPrice, setEditPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Variant | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
@@ -60,6 +64,18 @@ export default function PriceBookPage() {
     load();
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await fetch(`/api/pricebook/${deleteTarget.variantId}/delete`, { method: "POST" });
+    const data = await res.json();
+    setDeleting(false);
+    if (!res.ok) { setDeleteError(data.error || "Failed to delete variant."); return; }
+    setDeleteTarget(null);
+    load();
+  }
+
   return (
     <div>
       <div className="flex justify-between items-end mb-5 flex-wrap gap-3">
@@ -69,7 +85,12 @@ export default function PriceBookPage() {
             {canEdit ? "Base retail price for every IMEI-tracked SKU, stored globally in NTD." : "Read-only — only Admin can edit base prices or add new product variants."}
           </p>
         </div>
-        {canEdit && <button onClick={() => setShowAdd(true)} style={btnPrimary}>+ Add New Product Variant</button>}
+        {canEdit && (
+          <div className="flex gap-2">
+            <button onClick={() => setShowBulk(true)} style={btnGhost}>⬆ Bulk Add Variants</button>
+            <button onClick={() => setShowAdd(true)} style={btnPrimary}>+ Add New Product Variant</button>
+          </div>
+        )}
       </div>
 
       {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
@@ -105,7 +126,10 @@ export default function PriceBookPage() {
                       ) : editingId === v.variantId ? (
                         <button onClick={() => savePrice(v.variantId)} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>{saving ? "…" : "Save"}</button>
                       ) : (
-                        <button onClick={() => startEdit(v)} style={btnGhost}>Edit price</button>
+                        <>
+                          <button onClick={() => startEdit(v)} style={btnGhost}>Edit price</button>
+                          <button onClick={() => { setDeleteError(""); setDeleteTarget(v); }} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
+                        </>
                       )}
                     </td>
                   </tr>
@@ -145,23 +169,87 @@ export default function PriceBookPage() {
       {showAdd && canEdit && (
         <AddVariantModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(); }} />
       )}
+      {showBulk && canEdit && (
+        <BulkAddModal onClose={() => setShowBulk(false)} onImported={() => { setShowBulk(false); load(); }} />
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete this product variant?"
+          message={
+            <>
+              This will permanently remove <strong>{deleteTarget.modelName}{deleteTarget.color ? ` · ${deleteTarget.color}` : ""}</strong> (<span className="mono">{deleteTarget.variantId}</span>) from the Price Book. This cannot be undone.
+              {deleteError && <div style={{ color: "var(--danger)", marginTop: 10 }}>{deleteError}</div>}
+            </>
+          }
+          confirmLabel="Delete variant"
+          busy={deleting}
+          onConfirm={confirmDelete}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
-function AddVariantModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [draft, setDraft] = useState<VariantDraft>({ brand: "Apple", modelName: "", storage: "", color: "", price: 0 });
+function BulkAddModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [text, setText] = useState("IP15PRO-256-BLU, Apple, iPhone 15 Pro, 256GB, Titanium Blue, 41900\nSGS24-128-BLK, Samsung, Galaxy S24, 128GB, Black, 26900");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
 
   async function submit() {
-    if (!draft.modelName.trim() || !draft.storage.trim() || !draft.color.trim()) return;
+    setSubmitting(true);
+    setError("");
+    setResult(null);
+    const res = await fetch("/api/pricebook/bulk", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv: text }),
+    });
+    const data = await res.json();
+    setSubmitting(false);
+    if (!res.ok) { setError(data.error || "Bulk add failed."); return; }
+    setResult({ imported: data.imported, errors: data.errors || [] });
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Bulk Add Product Variants">
+      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>
+        One variant per line: SKU, Brand, Model, Storage, Color, Price — SKU is always set by you, for consistent naming (paste one row per line, simulating an Excel upload).
+      </div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 }} />
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      {result && (
+        <div style={{ fontSize: 13, marginTop: 10 }}>
+          <div style={{ color: "var(--ok)", fontWeight: 600 }}>Added {result.imported} variant(s).</div>
+          {result.errors.length > 0 && (
+            <ul style={{ color: "var(--danger)", fontSize: 12, marginTop: 4, paddingLeft: 18 }}>
+              {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>{result ? "Close" : "Cancel"}</button>
+        {!result && <button onClick={submit} disabled={submitting} style={btnPrimary}>{submitting ? "Adding…" : "Add rows"}</button>}
+        {result && <button onClick={onImported} style={btnPrimary}>Done</button>}
+      </div>
+    </ModalShell>
+  );
+}
+
+function AddVariantModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [draft, setDraft] = useState<VariantDraft>({ sku: "", brand: "Apple", modelName: "", storage: "", color: "", price: 0 });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const canSubmit = draft.sku.trim() && draft.modelName.trim() && draft.storage.trim() && draft.color.trim();
+
+  async function submit() {
+    if (!canSubmit) return;
     setSubmitting(true);
     setError("");
     const res = await fetch("/api/pricebook", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brand: draft.brand || null, modelGroup: draft.modelName, storage: draft.storage || null, color: draft.color || null, price: draft.price }),
+      body: JSON.stringify({ sku: draft.sku, brand: draft.brand || null, modelGroup: draft.modelName, storage: draft.storage || null, color: draft.color || null, price: draft.price }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -176,7 +264,7 @@ function AddVariantModal({ onClose, onCreated }: { onClose: () => void; onCreate
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
       <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
         <button onClick={onClose} style={btnGhost}>Cancel</button>
-        <button onClick={submit} disabled={submitting || !draft.modelName.trim() || !draft.storage.trim() || !draft.color.trim()} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+        <button onClick={submit} disabled={submitting || !canSubmit} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
           {submitting ? "Adding…" : "Save new model"}
         </button>
       </div>

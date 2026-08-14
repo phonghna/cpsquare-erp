@@ -49,21 +49,19 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   let { sku, brand, modelGroup, storage, color, price } = body;
+  if (!sku || !String(sku).trim()) {
+    return NextResponse.json({ error: "SKU is required." }, { status: 400 });
+  }
   if (!modelGroup || price === undefined || price === null) {
     return NextResponse.json({ error: "Model and price are required." }, { status: 400 });
   }
+  sku = String(sku).trim().toUpperCase();
 
   const db = getDb();
   const existingSkus = await db.select({ variantId: productVariants.variantId }).from(productVariants);
   const skuSet = new Set(existingSkus.map((v) => v.variantId));
 
-  if (!sku) {
-    const base = `${brand || ""}-${modelGroup}-${storage || ""}-${color || ""}`
-      .toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/(^-+|-+$)/g, "");
-    sku = base || `SKU-${Date.now()}`;
-    let n = 1;
-    while (skuSet.has(sku)) { n++; sku = `${base}-${n}`; }
-  } else if (skuSet.has(sku)) {
+  if (skuSet.has(sku)) {
     return NextResponse.json({ error: `SKU "${sku}" already exists.` }, { status: 409 });
   }
 

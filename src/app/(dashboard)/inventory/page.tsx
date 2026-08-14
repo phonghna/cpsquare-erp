@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  StatusPill, STATUS_META, Card, Empty, Tabs, ModalShell, Field, inputStyle, btnPrimary, btnGhost,
+  StatusPill, STATUS_META, Card, Empty, Tabs, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost,
   tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS,
 } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
@@ -28,6 +28,9 @@ export default function InventoryPage() {
   const [q, setQ] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   async function load() {
     setLoading(true);
@@ -51,10 +54,15 @@ export default function InventoryPage() {
     load();
   }
 
-  async function deleteDevice(imei: string) {
-    setBusy(imei);
-    await fetch(`/api/inventory/${imei}/delete`, { method: "POST" });
-    setBusy(null);
+  async function confirmDeleteDevice() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await fetch(`/api/inventory/${deleteTarget.imeiSerial}/delete`, { method: "POST" });
+    const data = await res.json();
+    setDeleting(false);
+    if (!res.ok) { setDeleteError(data.error || "Failed to delete device."); return; }
+    setDeleteTarget(null);
     load();
   }
 
@@ -127,7 +135,7 @@ export default function InventoryPage() {
                         {canOperate && i.status === "MEDIA_HOLD" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>}
                         {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
                         {canManage && i.status === "IN_STOCK" && (
-                          <button onClick={() => deleteDevice(i.imeiSerial)} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
+                          <button onClick={() => { setDeleteError(""); setDeleteTarget(i); }} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
                         )}
                       </td>
                     </tr>
@@ -164,6 +172,21 @@ export default function InventoryPage() {
 
       {showAdd && <AddDeviceModal variants={variants} onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(); }} />}
       {showBulk && <BulkImportModal onClose={() => setShowBulk(false)} onImported={() => { setShowBulk(false); load(); }} />}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete this device?"
+          message={
+            <>
+              This will permanently remove <strong>{deleteTarget.variant?.modelName || deleteTarget.imeiSerial}</strong> (<span className="mono">{deleteTarget.imeiSerial}</span>) from Inventory. This cannot be undone.
+              {deleteError && <div style={{ color: "var(--danger)", marginTop: 10 }}>{deleteError}</div>}
+            </>
+          }
+          confirmLabel="Delete device"
+          busy={deleting}
+          onConfirm={confirmDeleteDevice}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -182,20 +205,20 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
   const [battery, setBattery] = useState(98);
   const [cosmetic, setCosmetic] = useState("99%");
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState<VariantDraft>({ brand: BRANDS[0], modelName: "", storage: "", color: "", price: 0 });
+  const [draft, setDraft] = useState<VariantDraft>({ sku: "", brand: BRANDS[0], modelName: "", storage: "", color: "", price: 0 });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   function handleCreate(query: string) {
-    setDraft({ brand: BRANDS[0], modelName: query, storage: "", color: "", price: 0 });
+    setDraft({ sku: "", brand: BRANDS[0], modelName: query, storage: "", color: "", price: 0 });
     setCreating(true);
   }
 
   async function saveNewVariant() {
-    if (!draft.modelName.trim() || !draft.storage.trim() || !draft.color.trim()) return;
+    if (!draft.sku.trim() || !draft.modelName.trim() || !draft.storage.trim() || !draft.color.trim()) return;
     const res = await fetch("/api/pricebook", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brand: draft.brand, modelGroup: draft.modelName, storage: draft.storage, color: draft.color, price: draft.price }),
+      body: JSON.stringify({ sku: draft.sku, brand: draft.brand, modelGroup: draft.modelName, storage: draft.storage, color: draft.color, price: draft.price }),
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Failed to create model."); return; }
