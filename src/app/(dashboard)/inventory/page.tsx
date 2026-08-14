@@ -254,13 +254,19 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
     if (remarkRequired && !remark.trim()) return;
     setSubmitting(true);
     setError("");
-    const res = await fetch(`/api/inventory/${item.imeiSerial}/set-status`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, remark }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (!res.ok) { setError(data.error || "Failed to update status."); return; }
-    onSaved();
+    try {
+      const res = await fetch(`/api/inventory/${item.imeiSerial}/set-status`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, remark }),
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON error response */ }
+      if (!res.ok) { setError(data.error || `Failed to update status (HTTP ${res.status}).`); return; }
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to update status.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -283,10 +289,17 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
           style={{ ...inputStyle, resize: "vertical" }}
         />
       </Field>
+      {remarkRequired && !remark.trim() && (
+        <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 8 }}>A remark is required before you can save this status.</div>
+      )}
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
       <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
         <button onClick={onClose} style={btnGhost}>Cancel</button>
-        <button onClick={submit} disabled={submitting || (remarkRequired && !remark.trim())} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+        <button
+          onClick={submit}
+          disabled={submitting || (remarkRequired && !remark.trim())}
+          style={{ ...btnPrimary, opacity: submitting || (remarkRequired && !remark.trim()) ? 0.5 : 1, cursor: submitting || (remarkRequired && !remark.trim()) ? "not-allowed" : "pointer" }}
+        >
           {submitting ? "Saving…" : "Save status"}
         </button>
       </div>
