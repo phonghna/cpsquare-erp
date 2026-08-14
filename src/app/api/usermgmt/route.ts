@@ -90,6 +90,23 @@ export async function POST(req: NextRequest) {
     if (err?.code === "23505" || msg.toLowerCase().includes("app_users_username")) {
       return NextResponse.json({ error: `Username "${usernameLower}" is already taken.` }, { status: 409 });
     }
-    return NextResponse.json({ error: msg || "Failed to create user." }, { status: 500 });
+    // Temporary diagnostic payload (build marker "atomic-v2" + raw Postgres
+    // error fields) so we can tell from the browser alone whether this
+    // deployment is actually running the new atomic-insert code, and if so,
+    // exactly what Postgres is objecting to.
+    return NextResponse.json(
+      {
+        error: msg || "Failed to create user.",
+        _diagnostic: {
+          build: "atomic-v2",
+          code: err?.code,
+          detail: err?.detail,
+          constraint: err?.constraint,
+          table: err?.table,
+          hint: err?.hint,
+        },
+      },
+      { status: 500 }
+    );
   }
 }

@@ -174,7 +174,11 @@ function UserFormModal({
       });
       let data: any = {};
       try { data = await res.json(); } catch { /* non-JSON error body — fall through with generic message */ }
-      if (!res.ok) { setError(data.error || `Failed to save (HTTP ${res.status}).`); return; }
+      if (!res.ok) {
+        const diag = data._diagnostic ? ` — ${JSON.stringify(data._diagnostic)}` : "";
+        setError((data.error || `Failed to save (HTTP ${res.status}).`) + diag);
+        return;
+      }
       onSaved();
     } catch (err: any) {
       setError(err?.message || "Network error — please try again.");
