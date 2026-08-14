@@ -4,6 +4,7 @@ import { productItems, productVariants, imeiLogs, orders } from "@/lib/schema";
 import { getSession, canAccessPage, canSetSensitiveInventoryStatus } from "@/lib/auth";
 import { desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { deriveDisplayLocation, WAREHOUSE_CODES } from "@/lib/warehouse";
 
 // Only Admin manages the physical device catalog (add / bulk import / delete),
 // matching the v8.6 design reference.
@@ -30,6 +31,11 @@ export async function GET() {
 
   const result = items.map((i) => ({
     ...i,
+    // current_location is derived from warehouse_code for statuses where
+    // the device is physically sitting in a warehouse (or last known,
+    // for SHIPPED) — see src/lib/warehouse.ts. Everything else (Live Room,
+    // Admin, Technical Repair Room, etc.) is unchanged, existing behavior.
+    currentLocation: deriveDisplayLocation(i.status, i.warehouseCode, i.currentLocation),
     variant: variantById.get(i.variantId) || null,
     order: i.orderId ? orderById.get(i.orderId) || null : null,
   }));
@@ -53,10 +59,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { imeiSerial, variantId, batteryHealth, cosmeticCondition } = body;
+  const { imeiSerial, variantId, batteryHealth, cosmeticCondition, warehouseCode } = body;
   if (!imeiSerial || !variantId) {
     return NextResponse.json({ error: "IMEI and SKU are required." }, { status: 400 });
   }
+  const resolvedWarehouse = WAREHOUSE_CODES.includes(warehouseCode) ? warehouseCode : "XINSHENG";
 
   const db = getDb();
   const variant = await db.select({ variantId: productVariants.variantId }).from(productVariants).where(eq(productVariants.variantId, variantId));
@@ -75,6 +82,7 @@ export async function POST(req: NextRequest) {
     cosmeticCondition: cosmeticCondition || null,
     status: "IN_STOCK",
     currentLocation: "CPSquare Warehouse (TW)",
+    warehouseCode: resolvedWarehouse,
     updatedByUserId: session.userId,
   });
   await db.insert(imeiLogs).values({

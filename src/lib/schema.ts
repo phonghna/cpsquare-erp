@@ -75,6 +75,11 @@ export const productItems = pgTable("product_items", {
   // Stamped to now() by the API every time `status` changes (not on any row
   // update) — powers the "sorted by most recently edited" Reserved board.
   statusUpdatedAt: timestamp("status_updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // Which physical Taiwan warehouse this device's home base is. Persists
+  // independently of `currentLocation`'s operational state (Live Room,
+  // Technical Repair Room, etc.) so the device returns to the correct
+  // warehouse when it comes back, not a hardcoded default.
+  warehouseCode: text("warehouse_code").notNull().default("XINSHENG"),
   updatedByUserId: text("updated_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

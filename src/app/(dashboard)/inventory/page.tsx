@@ -6,11 +6,12 @@ import {
   tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS,
 } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
+import { WAREHOUSE_CODES, WAREHOUSE_SHORT_LABELS, WAREHOUSE_SITTING_STATUSES, otherWarehouse } from "@/lib/warehouse";
 
 type Item = {
   imeiSerial: string; variantId: string; status: string; currentLocation: string;
   batteryHealth: number | null; cosmeticCondition: string | null; orderId: string | null;
-  remark: string | null; statusUpdatedAt: string;
+  remark: string | null; statusUpdatedAt: string; warehouseCode: string;
   variant: { variantId: string; modelName: string; color: string | null } | null;
   order: { orderCode: string; customerName: string; customerSocialHandle: string | null; marketCode: string } | null;
 };
@@ -20,6 +21,11 @@ const fmt = (n: string | number) => "$" + Math.round(Number(n)).toLocaleString("
 
 const AVAILABLE_STATUSES = ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD"];
 const RESERVED_STATUSES = ["RESERVED", "PACKING", "SHIPPED", "MISSING", "WHOLESALE"];
+const WAREHOUSE_FILTER_OPTIONS = [
+  { value: "", label: "All warehouses" },
+  { value: "XINSHENG", label: "Xinsheng N Rd" },
+  { value: "TONGHUA", label: "Tonghua St" },
+];
 const STATUS_FILTER_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "IN_STOCK", label: "In Stock" },
@@ -50,12 +56,16 @@ export default function InventoryPage() {
   const [tab, setTab] = useState("available");
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [statusTarget, setStatusTarget] = useState<Item | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState("");
 
   async function load() {
     setLoading(true);
@@ -97,16 +107,57 @@ export default function InventoryPage() {
     load();
   }
 
+  async function transferOne(imei: string, targetWarehouse: string) {
+    setBusy(imei);
+    await fetch("/api/inventory/transfer-warehouse", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imeiSerials: [imei], targetWarehouse }),
+    });
+    setBusy(null);
+    load();
+  }
+
+  function toggleSelected(imei: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(imei)) next.delete(imei); else next.add(imei);
+      return next;
+    });
+  }
+
+  async function confirmBulkTransfer() {
+    if (selectedSourceWarehouse === null) return;
+    setTransferring(true);
+    setTransferError("");
+    const res = await fetch("/api/inventory/transfer-warehouse", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imeiSerials: Array.from(selected), targetWarehouse: otherWarehouse(selectedSourceWarehouse) }),
+    });
+    const data = await res.json();
+    setTransferring(false);
+    if (!res.ok) { setTransferError(data.error || "Transfer failed."); return; }
+    setSelected(new Set());
+    load();
+  }
+
   const available = useMemo(
-    () => items.filter((i) => AVAILABLE_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && matches(i, q)),
-    [items, q, statusFilter]
+    () => items.filter((i) => AVAILABLE_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && (!warehouseFilter || i.warehouseCode === warehouseFilter) && matches(i, q)),
+    [items, q, statusFilter, warehouseFilter]
   );
   const reserved = useMemo(
     () => items
-      .filter((i) => RESERVED_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && matches(i, q))
+      .filter((i) => RESERVED_STATUSES.includes(i.status) && (!statusFilter || i.status === statusFilter) && (!warehouseFilter || i.warehouseCode === warehouseFilter) && matches(i, q))
       .sort((a, b) => new Date(b.statusUpdatedAt).getTime() - new Date(a.statusUpdatedAt).getTime()),
-    [items, q, statusFilter]
+    [items, q, statusFilter, warehouseFilter]
   );
+
+  // The selected IMEIs' shared warehouse, or null if the selection is empty
+  // or spans both warehouses (bulk bar disables itself in that case).
+  const selectedSourceWarehouse = useMemo(() => {
+    if (selected.size === 0) return null;
+    const codes = new Set(Array.from(selected).map((imei) => items.find((i) => i.imeiSerial === imei)?.warehouseCode));
+    return codes.size === 1 ? (Array.from(codes)[0] as string) : null;
+  }, [selected, items]);
+  const selectionMixed = selected.size > 0 && selectedSourceWarehouse === null;
 
   function matches(i: Item, query: string) {
     if (!query) return true;
@@ -120,7 +171,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="disp text-2xl font-bold">IMEI Inventory</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-dim)" }}>
-            Centralized at CPSquare Warehouse (TW) — every serialized device serves all 4 markets from one pool.{!canOperate && " Search-only for your role."}
+            Centralized across two Taiwan warehouses (Xinsheng N Rd / Tonghua St) — every serialized device serves all 4 markets from one pool.{!canOperate && " Search-only for your role."}
           </p>
         </div>
         {canManage && (
@@ -141,7 +192,25 @@ export default function InventoryPage() {
         <select value={statusFilter} onChange={(e) => pickStatusFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 190 }}>
           {STATUS_FILTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)} style={{ ...inputStyle, maxWidth: 170 }}>
+          {WAREHOUSE_FILTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
+
+      {tab === "available" && selected.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", marginBottom: 12, borderRadius: 10, background: "var(--accent-bg)", border: "1px solid var(--accent)" }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{selected.size} selected</span>
+          {selectionMixed ? (
+            <span style={{ fontSize: 12.5, color: "var(--danger)" }}>Select devices from a single warehouse first.</span>
+          ) : (
+            <button onClick={confirmBulkTransfer} disabled={transferring} style={{ ...btnPrimary, opacity: transferring ? 0.6 : 1 }}>
+              {transferring ? "Transferring…" : `→ Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(selectedSourceWarehouse!)]}`}
+            </button>
+          )}
+          {transferError && <span style={{ fontSize: 12, color: "var(--danger)" }}>{transferError}</span>}
+          <button onClick={() => { setSelected(new Set()); setTransferError(""); }} style={{ ...btnGhost, marginLeft: "auto" }}>Clear selection</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
@@ -150,10 +219,29 @@ export default function InventoryPage() {
           {available.length === 0 ? <Empty title="No devices match" /> : (
             <div style={{ overflowX: "auto" }}>
               <table style={tableStyle}>
-                <thead><tr><th style={th}>IMEI</th><th style={th}>Product</th><th style={th}>Battery</th><th style={th}>Cosmetic</th><th style={th}>Location</th><th style={th}>Status</th><th style={th}></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th style={th}>
+                      <input
+                        type="checkbox"
+                        checked={available.length > 0 && available.every((i) => WAREHOUSE_SITTING_STATUSES.includes(i.status) ? selected.has(i.imeiSerial) : true)}
+                        onChange={(e) => {
+                          const eligible = available.filter((i) => WAREHOUSE_SITTING_STATUSES.includes(i.status)).map((i) => i.imeiSerial);
+                          setSelected(e.target.checked ? new Set(eligible) : new Set());
+                        }}
+                      />
+                    </th>
+                    <th style={th}>IMEI</th><th style={th}>Product</th><th style={th}>Battery</th><th style={th}>Cosmetic</th><th style={th}>Location</th><th style={th}>Status</th><th style={th}></th>
+                  </tr>
+                </thead>
                 <tbody>
                   {available.map((i) => (
                     <tr key={i.imeiSerial}>
+                      <td style={td}>
+                        {WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                          <input type="checkbox" checked={selected.has(i.imeiSerial)} onChange={() => toggleSelected(i.imeiSerial)} />
+                        )}
+                      </td>
                       <td style={td} className="mono">{i.imeiSerial}</td>
                       <td style={td}>{i.variant?.modelName} <span style={{ color: "var(--text-faint)" }}>· {i.variant?.color}</span></td>
                       <td style={td}>{i.batteryHealth ?? "—"}%</td>
@@ -170,6 +258,11 @@ export default function InventoryPage() {
                         {canOperate && i.status === "CHECKED_OUT_LIVE" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>Check-in shelf</ActionBtn>}
                         {canOperate && i.status === "MEDIA_HOLD" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>}
                         {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
+                        {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                          <ActionBtn busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>
+                            → {WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}
+                          </ActionBtn>
+                        )}
                         {canSetStatus && (
                           <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>
                         )}
@@ -208,6 +301,11 @@ export default function InventoryPage() {
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
                       <td style={td}>
                         {canOperate && i.status === "RESERVED" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>Unassign / Return to shelf</ActionBtn>}
+                        {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                          <ActionBtn busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>
+                            → {WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}
+                          </ActionBtn>
+                        )}
                         {canSetStatus && <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>}
                       </td>
                     </tr>
@@ -322,6 +420,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
   const [cosmetic, setCosmetic] = useState("99%");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<VariantDraft>({ sku: "", brand: BRANDS[0], modelName: "", storage: "", color: "", price: 0 });
+  const [warehouseCode, setWarehouseCode] = useState("XINSHENG");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -350,7 +449,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
     setError("");
     const res = await fetch("/api/inventory", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic }),
+      body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic, warehouseCode }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -383,6 +482,11 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
         <Field label="Battery %"><input type="number" value={battery} onChange={(e) => setBattery(Number(e.target.value))} style={inputStyle} /></Field>
         <Field label="Cosmetic condition"><input value={cosmetic} onChange={(e) => setCosmetic(e.target.value)} style={inputStyle} /></Field>
+        <Field label="Warehouse" full>
+          <select value={warehouseCode} onChange={(e) => setWarehouseCode(e.target.value)} style={inputStyle}>
+            {WAREHOUSE_CODES.map((c) => <option key={c} value={c}>{WAREHOUSE_SHORT_LABELS[c]}</option>)}
+          </select>
+        </Field>
       </div>
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
       <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
@@ -397,6 +501,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
 
 function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [text, setText] = useState("356938035643809, IP14PM-256-BLK, 98, Like new");
+  const [warehouseCode, setWarehouseCode] = useState("XINSHENG");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
@@ -406,7 +511,7 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
     setError("");
     setResult(null);
     const res = await fetch("/api/inventory/bulk", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv: text }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv: text, warehouseCode }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -416,7 +521,12 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
 
   return (
     <ModalShell onClose={onClose} title="Bulk Import Devices">
-      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>One device per line: IMEI, VariantSKU, Battery%, Cosmetic — paste one row per line (simulating an Excel upload).</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>One device per line: IMEI, VariantSKU, Battery%, Cosmetic — paste one row per line (simulating an Excel upload). All rows in this batch are received into the warehouse picked below.</div>
+      <Field label="Receiving warehouse">
+        <select value={warehouseCode} onChange={(e) => setWarehouseCode(e.target.value)} style={{ ...inputStyle, maxWidth: 220, marginBottom: 10 }}>
+          {WAREHOUSE_CODES.map((c) => <option key={c} value={c}>{WAREHOUSE_SHORT_LABELS[c]}</option>)}
+        </select>
+      </Field>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 }} />
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
       {result && (

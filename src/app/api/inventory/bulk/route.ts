@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db-pool";
 import { getSession, canAccessPage } from "@/lib/auth";
 import { randomUUID } from "crypto";
+import { WAREHOUSE_CODES } from "@/lib/warehouse";
 
 // Bulk receive: pasted CSV-like textarea, one row per line:
 //   imei,variant_id,battery_health,cosmetic_condition
@@ -15,10 +16,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only Admin can bulk import IMEI stock." }, { status: 403 });
   }
 
-  const { csv } = await req.json();
+  const { csv, warehouseCode } = await req.json();
   if (!csv || typeof csv !== "string") {
     return NextResponse.json({ error: "No CSV text provided." }, { status: 400 });
   }
+  const resolvedWarehouse = WAREHOUSE_CODES.includes(warehouseCode) ? warehouseCode : "XINSHENG";
 
   const lines = csv
     .split("\n")
@@ -65,9 +67,9 @@ export async function POST(req: NextRequest) {
         continue;
       }
       await client.query(
-        `INSERT INTO product_items (imei_serial, variant_id, battery_health, cosmetic_condition, status, current_location, updated_by_user_id)
-         VALUES ($1,$2,$3,$4,'IN_STOCK','CPSquare Warehouse (TW)',$5)`,
-        [row.imei, row.variantId, row.battery, row.condition, session.userId]
+        `INSERT INTO product_items (imei_serial, variant_id, battery_health, cosmetic_condition, status, current_location, warehouse_code, updated_by_user_id)
+         VALUES ($1,$2,$3,$4,'IN_STOCK','CPSquare Warehouse (TW)',$5,$6)`,
+        [row.imei, row.variantId, row.battery, row.condition, resolvedWarehouse, session.userId]
       );
       await client.query(
         `INSERT INTO imei_logs (log_id, imei_serial, status_from, status_to, performed_by_user_id)
