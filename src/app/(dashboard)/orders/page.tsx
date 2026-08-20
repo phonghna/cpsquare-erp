@@ -102,7 +102,7 @@ export default function OrdersPage() {
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  <th style={th}>Order Code</th><th style={th}>Channel</th><th style={th}>Items</th>
+                  <th style={th}>Order Number</th><th style={th}>Channel</th><th style={th}>Items</th>
                   <th style={th}>Customer</th><th style={th}>Carrier</th><th style={th}>Payment</th>
                   <th style={th}>Total</th><th style={th}>Status</th><th style={th}>Tasks</th>
                 </tr>

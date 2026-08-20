@@ -165,7 +165,7 @@ export default function TrackingPage() {
 
       <Card style={{ padding: 14, marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input placeholder="Search tracking #, order code, or customer/handle..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }} />
+          <input placeholder="Search tracking #, order number, or customer/handle..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }} />
           <select value={range} onChange={(e) => setRange(e.target.value as DateRangeKey)} style={{ ...inputStyle, maxWidth: 160 }}>
             <option value="ALL">All time</option>
             <option value="TODAY">Today</option>

@@ -293,7 +293,7 @@ export default function InventoryPage() {
           {reserved.length === 0 ? <Empty title="No IMEIs reserved for orders" /> : (
             <div style={{ overflowX: "auto" }}>
               <table style={tableStyle}>
-                <thead><tr><th style={th}>IMEI</th><th style={th}>Product / Color</th><th style={th}>Order Code</th><th style={th}>Customer</th><th style={th}>Market</th><th style={th}>Progress</th><th style={th}></th></tr></thead>
+                <thead><tr><th style={th}>IMEI</th><th style={th}>Product / Color</th><th style={th}>Order Number</th><th style={th}>Customer</th><th style={th}>Market</th><th style={th}>Progress</th><th style={th}></th></tr></thead>
                 <tbody>
                   {reserved.map((i) => (
                     <tr key={i.imeiSerial}>

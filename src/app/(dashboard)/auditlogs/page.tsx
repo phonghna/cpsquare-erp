@@ -61,7 +61,7 @@ export default function AuditLogsPage() {
         active={tab}
         onChange={setTab}
       />
-      <input placeholder="Search order code, IMEI, or action..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320, marginBottom: 16 }} />
+      <input placeholder="Search order number, IMEI, or action..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 320, marginBottom: 16 }} />
 
       {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
