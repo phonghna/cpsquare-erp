@@ -20,7 +20,7 @@ type Variant = { variantId: string; modelName: string; color: string | null; sel
 const fmt = (n: string | number) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
 
 const AVAILABLE_STATUSES = ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD"];
-const RESERVED_STATUSES = ["RESERVED", "PACKING", "SHIPPED", "MISSING", "WHOLESALE"];
+const RESERVED_STATUSES = ["RESERVED", "PACKING", "SHIPPED", "MISSING", "WHOLESALE", "OTHER"];
 const WAREHOUSE_FILTER_OPTIONS = [
   { value: "", label: "All warehouses" },
   { value: "XINSHENG", label: "Xinsheng N Rd" },
@@ -36,6 +36,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "SHIPPED", label: "Shipped" },
   { value: "MISSING", label: "Missing" },
   { value: "WHOLESALE", label: "Wholesale" },
+  { value: "OTHER", label: "Other" },
 ];
 const SET_STATUS_OPTIONS = [
   { value: "IN_STOCK", label: "In Stock" },
@@ -43,6 +44,7 @@ const SET_STATUS_OPTIONS = [
   { value: "MEDIA_HOLD", label: "Media Hold" },
   { value: "MISSING", label: "Missing" },
   { value: "WHOLESALE", label: "Wholesale" },
+  { value: "OTHER", label: "Other" },
 ];
 
 export default function InventoryPage() {
@@ -368,7 +370,7 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
   const [remark, setRemark] = useState(item.remark || "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const remarkRequired = status === "MISSING" || status === "WHOLESALE";
+  const remarkRequired = status === "MISSING" || status === "WHOLESALE" || status === "OTHER";
 
   async function submit() {
     if (remarkRequired && !remark.trim()) return;
@@ -405,7 +407,7 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
           value={remark}
           onChange={(e) => setRemark(e.target.value)}
           rows={3}
-          placeholder={remarkRequired ? "e.g. Last seen at Live Room #2, unaccounted for after Aug 20 stocktake" : "Optional note"}
+          placeholder={remarkRequired ? (status === "OTHER" ? "Describe why this device is set to Other" : "e.g. Last seen at Live Room #2, unaccounted for after Aug 20 stocktake") : "Optional note"}
           style={{ ...inputStyle, resize: "vertical" }}
         />
       </Field>

@@ -69,7 +69,7 @@ export const productItems = pgTable("product_items", {
   orderId: text("order_id"),
   rmaStage: text("rma_stage"),
   // Free-text context for a status change — mandatory (enforced in the API)
-  // when status is set to MISSING or WHOLESALE, e.g. "Last seen at Live Room
+  // when status is set to MISSING, WHOLESALE, or OTHER, e.g. "Last seen at Live Room
   // #2, unaccounted for after Aug 20 stocktake".
   remark: text("remark"),
   // Stamped to now() by the API every time `status` changes (not on any row

@@ -4,16 +4,18 @@ import { getSession, canAccessPage, canSetSensitiveInventoryStatus } from "@/lib
 import { randomUUID } from "crypto";
 import { roomFor } from "@/app/api/live/route";
 
-// Admin/Manager-only override: jump a device directly to any of the 5
+// Admin/Manager-only override: jump a device directly to any of the 6
 // "settable by hand" statuses, regardless of its current status. This is
 // separate from the quick-action buttons (Check-out live / Media hold /
 // Check-in / Release hold) that other operating roles use, and is the only
-// way to record MISSING (lost/unaccounted-for) or WHOLESALE (bulk-sold
-// outside the normal one-customer Orders flow). REPAIRING is intentionally
-// not offered here — it stays driven by the RMA flow so its stage tracking
-// isn't bypassed.
-const SETTABLE_STATUSES = ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD", "MISSING", "WHOLESALE"];
-const REMARK_REQUIRED = new Set(["MISSING", "WHOLESALE"]);
+// way to record MISSING (lost/unaccounted-for), WHOLESALE (bulk-sold
+// outside the normal one-customer Orders flow), or OTHER (catch-all,
+// same mandatory-remark behavior as Wholesale for any situation that
+// doesn't fit the other buckets). REPAIRING is intentionally not offered
+// here — it stays driven by the RMA flow so its stage tracking isn't
+// bypassed.
+const SETTABLE_STATUSES = ["IN_STOCK", "CHECKED_OUT_LIVE", "MEDIA_HOLD", "MISSING", "WHOLESALE", "OTHER"];
+const REMARK_REQUIRED = new Set(["MISSING", "WHOLESALE", "OTHER"]);
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ imei: string }> }) {
   const { imei } = await params;
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
   }
   const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
   if (REMARK_REQUIRED.has(status) && !trimmedRemark) {
-    return NextResponse.json({ error: "A remark is required when setting a device to Missing or Wholesale." }, { status: 400 });
+    return NextResponse.json({ error: "A remark is required when setting a device to Missing, Wholesale, or Other." }, { status: 400 });
   }
 
   let location: string | null = null;
@@ -44,8 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
     }
     location = room.label;
   }
-  // MEDIA_HOLD / MISSING / WHOLESALE: leave current_location as-is — for
-  // MISSING in particular, the last known location is useful context
+  // MEDIA_HOLD / MISSING / WHOLESALE / OTHER: leave current_location as-is —
+  // for MISSING in particular, the last known location is useful context
   // alongside the remark, not something to overwrite.
 
   const pool = getPool();
