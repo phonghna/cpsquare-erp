@@ -300,8 +300,19 @@ export default function InventoryPage() {
                       <td style={td}>
                         <div className="mono">{i.imeiSerial}</div>
                         {i.remark && (
-                          <div title={i.remark} style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {i.remark}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, maxWidth: 240 }}>
+                            <span title={i.remark} style={{ fontSize: 11, color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {i.remark}
+                            </span>
+                            {canSetStatus && (
+                              <button
+                                onClick={() => setStatusTarget(i)}
+                                title="Edit note"
+                                style={{ border: "none", background: "none", padding: 0, fontSize: 11, color: "var(--accent-dark)", cursor: "pointer", flexShrink: 0 }}
+                              >
+                                ✎ Edit
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
