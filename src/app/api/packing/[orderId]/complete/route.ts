@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
     }
 
     const accRes = await client.query(
-      `SELECT accessory_row_id, variant_id FROM order_accessories WHERE order_id = $1`,
+      `SELECT accessory_row_id, variant_id, quantity FROM order_accessories WHERE order_id = $1`,
       [orderId]
     );
     const actualAccIds = accRes.rows.map((r) => r.accessory_row_id).sort();
@@ -84,8 +84,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
         [row.accessory_row_id]
       );
       await client.query(
-        `UPDATE product_variants SET reserved_quantity = GREATEST(0, reserved_quantity - 1) WHERE variant_id = $1`,
-        [row.variant_id]
+        `UPDATE product_variants SET reserved_quantity = GREATEST(0, reserved_quantity - $1) WHERE variant_id = $2`,
+        [row.quantity, row.variant_id]
       );
     }
 

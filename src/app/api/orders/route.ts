@@ -44,6 +44,7 @@ export async function GET() {
 }
 
 type ItemInput = { variantId: string; price: number; imeiMode: "auto" | "manual"; manualImei?: string };
+type AccessoryInput = { variantId: string; quantity: number; price: number };
 
 // Creates a multi-item order: each phone row claims either a specific IMEI
 // (manual) or the first available unit for its SKU (auto, SKIP LOCKED), all
@@ -62,13 +63,13 @@ export async function POST(req: NextRequest) {
     marketCode, salesChannel, customerName, customerSocialHandle,
     customerPhone, postalCode, shippingAddress, carrierService, paymentType,
     downpayment = 0, installmentTerm,
-    items, accessoryVariantIds = [],
+    items, accessories = [],
     priceOverridden = false, approvedByUserId = null,
   }: {
     marketCode: string; salesChannel: string; customerName: string; customerSocialHandle?: string;
     customerPhone?: string; postalCode?: string; shippingAddress: string; carrierService: string; paymentType: string;
     downpayment?: number; installmentTerm?: number;
-    items: ItemInput[]; accessoryVariantIds?: string[];
+    items: ItemInput[]; accessories?: AccessoryInput[];
     priceOverridden?: boolean; approvedByUserId?: string | null;
   } = body;
 
@@ -109,17 +110,25 @@ export async function POST(req: NextRequest) {
       resolvedItems.push({ variantId: row.variantId, imei, price: Number(row.price) });
     }
 
-    // Claim accessories (decrement stock, increment reserved)
-    const claimedAccessories: { variantId: string; name: string }[] = [];
-    for (const variantId of accessoryVariantIds as string[]) {
+    // Claim accessories (decrement stock, increment reserved) — accessories
+    // are now priced/quantified line items, same as phones, so each row
+    // claims `quantity` units atomically inside this same transaction.
+    const claimedAccessories: { variantId: string; name: string; quantity: number; price: number }[] = [];
+    for (const row of accessories as AccessoryInput[]) {
+      const qty = Number(row.quantity) || 0;
+      if (qty < 1) { await client.query("ROLLBACK"); return NextResponse.json({ error: "Accessory quantity must be at least 1." }, { status: 400 }); }
       const acc = await client.query(
-        `SELECT model_name, stock_quantity FROM product_variants WHERE variant_id = $1 AND is_serialized = FALSE FOR UPDATE`,
-        [variantId]
+        `SELECT model_name FROM product_variants WHERE variant_id = $1 AND is_serialized = FALSE FOR UPDATE`,
+        [row.variantId]
       );
-      if (acc.rowCount === 0) { await client.query("ROLLBACK"); return NextResponse.json({ error: `Accessory ${variantId} not found.` }, { status: 400 }); }
-      if (acc.rows[0].stock_quantity <= 0) { await client.query("ROLLBACK"); return NextResponse.json({ error: `Accessory ${variantId} is out of stock.` }, { status: 409 }); }
-      await client.query(`UPDATE product_variants SET stock_quantity = stock_quantity - 1, reserved_quantity = reserved_quantity + 1 WHERE variant_id = $1`, [variantId]);
-      claimedAccessories.push({ variantId, name: acc.rows[0].model_name });
+      if (acc.rowCount === 0) { await client.query("ROLLBACK"); return NextResponse.json({ error: `Accessory ${row.variantId} not found.` }, { status: 400 }); }
+      const claim = await client.query(
+        `UPDATE product_variants SET stock_quantity = stock_quantity - $1, reserved_quantity = reserved_quantity + $1
+         WHERE variant_id = $2 AND stock_quantity >= $1`,
+        [qty, row.variantId]
+      );
+      if (claim.rowCount === 0) { await client.query("ROLLBACK"); return NextResponse.json({ error: `Not enough stock for accessory ${acc.rows[0].model_name} (need ${qty}).` }, { status: 409 }); }
+      claimedAccessories.push({ variantId: row.variantId, name: acc.rows[0].model_name, quantity: qty, price: Number(row.price) });
     }
 
     const now = new Date();
@@ -134,7 +143,7 @@ export async function POST(req: NextRequest) {
     const seq = counter.rows[0].last_sequence;
     const orderCode = `${MARKET_PREFIX[marketCode]}${seq}${MONTH_ABBR[now.getMonth()]}${now.getFullYear()}`;
 
-    const total = resolvedItems.reduce((s, i) => s + i.price, 0);
+    const total = resolvedItems.reduce((s, i) => s + i.price, 0) + claimedAccessories.reduce((s, a) => s + a.price * a.quantity, 0);
     let downReceived = 0, codCollect = total, remaining = 0;
     if (paymentType === "DOWNPAYMENT_COD") { downReceived = Number(downpayment); codCollect = Math.max(0, total - downReceived); }
     if (paymentType === "INSTALLMENT") { downReceived = Number(downpayment); codCollect = downReceived; remaining = Math.max(0, total - downReceived); }
@@ -170,15 +179,17 @@ export async function POST(req: NextRequest) {
 
     for (const acc of claimedAccessories) {
       await client.query(
-        `INSERT INTO order_accessories (accessory_row_id, order_id, variant_id, accessory_name, is_verified) VALUES ($1,$2,$3,$4,FALSE)`,
-        [randomUUID(), orderId, acc.variantId, acc.name]
+        `INSERT INTO order_accessories (accessory_row_id, order_id, variant_id, accessory_name, is_verified, quantity, unit_price_ntd)
+         VALUES ($1,$2,$3,$4,FALSE,$5,$6)`,
+        [randomUUID(), orderId, acc.variantId, acc.name, acc.quantity, acc.price]
       );
     }
 
     if (priceOverridden && approvedByUserId) {
+      const overriddenVariantIds = [...resolvedItems.map((i) => i.variantId), ...claimedAccessories.map((a) => a.variantId)];
       await client.query(
         `INSERT INTO price_change_logs (log_id, variant_id, order_id, approved_by_user_id, note) VALUES ($1,$2,$3,$4,$5)`,
-        [randomUUID(), resolvedItems.map((i) => i.variantId).join(", "), orderId, approvedByUserId, `Order-level override, total locked at ${total} NTD`]
+        [randomUUID(), overriddenVariantIds.join(", "), orderId, approvedByUserId, `Order-level override, total locked at ${total} NTD`]
       );
       await client.query(
         `INSERT INTO order_logs (log_id, order_id, action_type, performed_by_user_id, note) VALUES ($1,$2,'PRICE_OVERRIDE_APPROVED',$3,$4)`,

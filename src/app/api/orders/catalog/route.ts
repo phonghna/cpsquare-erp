@@ -33,6 +33,7 @@ export async function GET() {
       modelName: productVariants.modelName,
       compatibleModel: productVariants.compatibleModel,
       stockQuantity: productVariants.stockQuantity,
+      sellingPriceNtd: productVariants.sellingPriceNtd,
     })
     .from(productVariants)
     .where(eq(productVariants.isSerialized, false))

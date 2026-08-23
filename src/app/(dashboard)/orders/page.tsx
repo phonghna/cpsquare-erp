@@ -17,7 +17,7 @@ const CANCEL_REASONS = ["Customer changed mind", "Customer wants a different mod
 const NOT_CANCELLABLE = ["CANCELLED", "DELIVERY_FAILED", "RETURNED", "DELIVERED"];
 
 type OrderItem = { itemId: string; variantId: string; imeiSerial: string; itemPriceNtd: string };
-type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string };
+type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; quantity: number; unitPriceNtd: string };
 type Order = {
   orderId: string; orderCode: string; marketCode: string; salesChannel: string; customerName: string;
   customerSocialHandle: string | null; customerPhone: string | null; postalCode: string | null; shippingAddress: string;
@@ -25,7 +25,7 @@ type Order = {
   installmentTermMonths: number | null; shipmentStatus: string; items: OrderItem[]; accessories: OrderAccessory[];
 };
 type Variant = { variantId: string; brand: string | null; modelGroup: string; modelName: string; color: string | null; sellingPriceNtd: string };
-type AccessoryOpt = { variantId: string; modelName: string; compatibleModel: string | null; stockQuantity: number };
+type AccessoryOpt = { variantId: string; modelName: string; compatibleModel: string | null; stockQuantity: number; sellingPriceNtd: string };
 
 const fmt = (n: string | number) => "$" + Math.round(Number(n)).toLocaleString("en-US") + " NTD";
 
@@ -184,6 +184,7 @@ function CancelOrderModal({ order, onClose, onConfirm }: { order: Order; onClose
 }
 
 type Row = { rid: string; variantId: string; price: number; mode: "keep" | "auto" | "manual"; keepImei?: string; manualImei?: string; overridden: boolean };
+type AccRow = { arid: string; variantId: string; quantity: number; price: number; overridden: boolean };
 
 function OrderFormModal({
   mode, order, role, onClose, onSaved,
@@ -206,10 +207,11 @@ function OrderFormModal({
   const [installmentTerm, setInstallmentTerm] = useState(order?.installmentTermMonths || 3);
 
   const [rows, setRows] = useState<Row[]>([]);
-  const [checkedAcc, setCheckedAcc] = useState<Record<string, boolean>>({});
+  const [accRows, setAccRows] = useState<AccRow[]>([]);
   const [approvedByUserId, setApprovedByUserId] = useState<string | null>(null);
   const [approvedByName, setApprovedByName] = useState<string | null>(null);
   const [approvalTargetRid, setApprovalTargetRid] = useState<string | null>(null);
+  const [approvalTargetKind, setApprovalTargetKind] = useState<"phone" | "accessory">("phone");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -224,9 +226,7 @@ function OrderFormModal({
       setAccessories(data.accessories || []);
       if (isEdit && order) {
         setRows(order.items.map((it) => ({ rid: it.itemId, variantId: it.variantId, price: Number(it.itemPriceNtd), mode: "keep", keepImei: it.imeiSerial, overridden: false })));
-        const acc: Record<string, boolean> = {};
-        order.accessories.forEach((a) => { acc[a.variantId] = true; });
-        setCheckedAcc(acc);
+        setAccRows(order.accessories.map((a) => ({ arid: a.accessoryRowId, variantId: a.variantId, quantity: a.quantity, price: Number(a.unitPriceNtd), overridden: false })));
       } else if (vs[0]) {
         setRows([{ rid: crypto.randomUUID(), variantId: vs[0].variantId, price: Number(vs[0].sellingPriceNtd), mode: "auto", overridden: false }]);
       }
@@ -254,15 +254,51 @@ function OrderFormModal({
     updateRow(rid, { variantId, price: v ? Number(v.sellingPriceNtd) : 0, overridden: false, manualImei: undefined, keepImei: undefined, mode: "auto" });
     loadUnits(variantId);
   }
-  function requestOverride(rid: string) {
-    if (canEditPriceDirectly) updateRow(rid, { overridden: true });
-    else setApprovalTargetRid(rid);
+  function requestOverride(rid: string, kind: "phone" | "accessory" = "phone") {
+    if (canEditPriceDirectly) {
+      if (kind === "phone") updateRow(rid, { overridden: true });
+      else updateAccRow(rid, { overridden: true });
+    } else {
+      setApprovalTargetRid(rid);
+      setApprovalTargetKind(kind);
+    }
   }
   function swapImei(rid: string) { updateRow(rid, { mode: "auto", keepImei: undefined, manualImei: undefined }); }
 
-  const total = rows.reduce((s, r) => s + Number(r.price || 0), 0);
+  function accessoryOf(id: string) { return accessories.find((a) => a.variantId === id); }
+  function addAccRow() {
+    if (!compatibleAccessories[0]) return;
+    const a = compatibleAccessories[0];
+    setAccRows((r) => [...r, { arid: crypto.randomUUID(), variantId: a.variantId, quantity: 1, price: Number(a.sellingPriceNtd), overridden: false }]);
+  }
+  function removeAccRow(arid: string) { setAccRows((r) => r.filter((x) => x.arid !== arid)); }
+  function updateAccRow(arid: string, patch: Partial<AccRow>) { setAccRows((r) => r.map((x) => (x.arid === arid ? { ...x, ...patch } : x))); }
+  function onAccVariantChange(arid: string, variantId: string) {
+    const a = accessoryOf(variantId);
+    updateAccRow(arid, { variantId, price: a ? Number(a.sellingPriceNtd) : 0, quantity: 1, overridden: false });
+  }
+
+  const phoneTotal = rows.reduce((s, r) => s + Number(r.price || 0), 0);
+  const accessoryTotal = accRows.reduce((s, r) => s + Number(r.price || 0) * Number(r.quantity || 0), 0);
+  const total = phoneTotal + accessoryTotal;
   const modelGroups = [...new Set(rows.map((r) => variantOf(r.variantId)?.modelGroup).filter(Boolean))];
   const compatibleAccessories = accessories.filter((a) => a.compatibleModel === null || modelGroups.includes(a.compatibleModel));
+
+  // The catalog's stockQuantity is "available right now" and, in edit mode,
+  // already excludes whatever this very order has reserved — add that back
+  // per variant so keeping/adjusting an existing line isn't blocked by its
+  // own current reservation.
+  const originalAccQty = useMemo(() => {
+    const m: Record<string, number> = {};
+    (order?.accessories || []).forEach((a) => { m[a.variantId] = (m[a.variantId] || 0) + a.quantity; });
+    return m;
+  }, [order]);
+  function availableStockFor(variantId: string) {
+    const a = accessoryOf(variantId);
+    if (!a) return 0;
+    return a.stockQuantity + (originalAccQty[variantId] || 0);
+  }
+  const accStockExceeded = accRows.some((r) => Number(r.quantity) > availableStockFor(r.variantId));
 
   async function submit() {
     setSubmitting(true);
@@ -272,8 +308,8 @@ function OrderFormModal({
       customerPhone: customerPhone || null, shippingAddress, carrierService, paymentType,
       downpayment, installmentTerm: paymentType === "INSTALLMENT" ? installmentTerm : null,
       items: rows.map((r) => ({ variantId: r.variantId, price: r.price, mode: r.mode, keepImei: r.keepImei, manualImei: r.manualImei, imeiMode: r.mode === "manual" ? "manual" : "auto" })),
-      accessoryVariantIds: Object.keys(checkedAcc).filter((k) => checkedAcc[k]),
-      priceOverridden: rows.some((r) => r.overridden),
+      accessories: accRows.map((r) => ({ variantId: r.variantId, quantity: r.quantity, price: r.price })),
+      priceOverridden: rows.some((r) => r.overridden) || accRows.some((r) => r.overridden),
       approvedByUserId,
     };
     const url = isEdit ? `/api/orders/${order!.orderId}/edit` : "/api/orders";
@@ -284,7 +320,7 @@ function OrderFormModal({
     onSaved();
   }
 
-  const allRowsReady = rows.every((r) => r.mode === "keep" || (r.mode === "manual" ? !!r.manualImei : true));
+  const allRowsReady = rows.every((r) => r.mode === "keep" || (r.mode === "manual" ? !!r.manualImei : true)) && !accStockExceeded;
 
   return (
     <ModalShell onClose={onClose} title={isEdit ? `Edit order ${order?.orderCode}` : "New Order Intake — Multi-item"} wide>
@@ -388,18 +424,64 @@ function OrderFormModal({
             );
           })}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", margin: "16px 0 4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Accessory checklist</div>
-          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginBottom: 8 }}>Auto-filtered to fit {modelGroups.join(" + ") || "selected phones"}.</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-            {compatibleAccessories.map((a) => (
-              <label key={a.variantId} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "#fff", opacity: a.stockQuantity <= 0 && !checkedAcc[a.variantId] ? 0.5 : 1 }}>
-                <input type="checkbox" disabled={a.stockQuantity <= 0 && !checkedAcc[a.variantId]} checked={!!checkedAcc[a.variantId]} onChange={(e) => setCheckedAcc((c) => ({ ...c, [a.variantId]: e.target.checked }))} />
-                {a.modelName} <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>({a.stockQuantity} in stock)</span>
-              </label>
-            ))}
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: "0.04em", display: "flex", justifyContent: "space-between" }}>
+            <span>Accessories on this order ({accRows.length})</span>
+            <button onClick={addAccRow} disabled={compatibleAccessories.length === 0} style={btnGhost}>+ Add accessory to order</button>
           </div>
+          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginBottom: 8 }}>Auto-filtered to fit {modelGroups.join(" + ") || "selected phones"}, plus universal accessories.</div>
 
-          <div style={{ padding: 14, borderRadius: 8, background: "var(--accent-bg)", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          {accRows.map((row, idx) => {
+            const a = accessoryOf(row.variantId);
+            const available = availableStockFor(row.variantId);
+            const exceeded = Number(row.quantity) > available;
+            return (
+              <Card key={row.arid} className="mb-2.5" style={{ padding: 12, background: "var(--paper)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>Accessory #{idx + 1}</span>
+                  <button onClick={() => removeAccRow(row.arid)} style={{ border: "none", background: "none", color: "var(--danger)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Remove ✕</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
+                  <Field label="Accessory (type to search)">
+                    <SearchCombobox
+                      options={compatibleAccessories.map((p) => ({ ...p, __key: p.variantId }))}
+                      value={row.variantId}
+                      onSelect={(v) => onAccVariantChange(row.arid, v)}
+                      placeholder="e.g. Case, charger, screen protector..."
+                      searchText={(p) => `${p.modelName}`}
+                      renderLabel={(p) => `${p.modelName} (${fmt(p.sellingPriceNtd)})`}
+                    />
+                  </Field>
+                  <Field label={`Quantity (${available} in stock)`}>
+                    <input
+                      type="number" min={1} max={available || undefined} value={row.quantity}
+                      onChange={(e) => updateAccRow(row.arid, { quantity: Math.max(1, Number(e.target.value)) })}
+                      style={{ ...inputStyle, borderColor: exceeded ? "var(--danger)" : undefined }}
+                    />
+                  </Field>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: 10, borderRadius: 8, background: "#fff", border: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)" }}>UNIT PRICE</span>
+                  <input
+                    type="number" value={row.price} disabled={!row.overridden && !canEditPriceDirectly}
+                    onChange={(e) => updateAccRow(row.arid, { price: Number(e.target.value) })}
+                    style={{ ...inputStyle, maxWidth: 140, fontWeight: 700, background: row.overridden || canEditPriceDirectly ? "#fff" : "var(--gray-bg)" }}
+                  />
+                  <span className="mono" style={{ color: "var(--text-faint)", fontSize: 12 }}>Base: {a ? fmt(a.sellingPriceNtd) : "—"}</span>
+                  <span className="mono" style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 700 }}>= {fmt(Number(row.price || 0) * Number(row.quantity || 0))}</span>
+                  {!row.overridden && !canEditPriceDirectly && <button onClick={() => requestOverride(row.arid, "accessory")} style={btnGhost}>Override…</button>}
+                  {row.overridden && approvedByName && !canEditPriceDirectly && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ok)" }}>✓ {approvedByName}</span>}
+                </div>
+                {exceeded && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--danger)", fontWeight: 600 }}>Only {available} in stock — reduce quantity to continue.</div>
+                )}
+              </Card>
+            );
+          })}
+          {accRows.length === 0 && (
+            <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginBottom: 16 }}>No accessories added.</div>
+          )}
+
+          <div style={{ padding: 14, borderRadius: 8, background: "var(--accent-bg)", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-dark)" }}>Order total (locked)</span>
             <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-dark)" }}>{fmt(total)}</span>
           </div>
@@ -415,7 +497,11 @@ function OrderFormModal({
           {approvalTargetRid && (
             <AdminApprovalModal
               onClose={() => setApprovalTargetRid(null)}
-              onApprove={(userId, name) => { updateRow(approvalTargetRid, { overridden: true }); setApprovedByUserId(userId); setApprovedByName(name); setApprovalTargetRid(null); }}
+              onApprove={(userId, name) => {
+                if (approvalTargetKind === "phone") updateRow(approvalTargetRid, { overridden: true });
+                else updateAccRow(approvalTargetRid, { overridden: true });
+                setApprovedByUserId(userId); setApprovedByName(name); setApprovalTargetRid(null);
+              }}
             />
           )}
         </>

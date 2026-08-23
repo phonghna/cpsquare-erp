@@ -127,6 +127,12 @@ export const orderAccessories = pgTable("order_accessories", {
   variantId: text("variant_id").notNull(),
   accessoryName: text("accessory_name").notNull(),
   isVerified: boolean("is_verified").notNull().default(false),
+  // Accessories are now sold/priced line items (like phones), not free
+  // bundled checklist items. quantity + unitPriceNtd are LOCKED at order
+  // time — same principle as order_items.item_price_ntd — so a later Price
+  // Book change never retroactively alters a past invoice.
+  quantity: integer("quantity").notNull().default(1),
+  unitPriceNtd: decimal("unit_price_ntd", { precision: 10, scale: 2 }).notNull().default("0"),
 });
 
 export const paymentSchedules = pgTable("payment_schedules", {

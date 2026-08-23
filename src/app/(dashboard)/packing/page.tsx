@@ -5,7 +5,7 @@ import { Card, Empty, ModalShell, btnPrimary, btnGhost } from "@/components/ui";
 import { ImeiScanField } from "@/components/ImeiScanner";
 
 type OrderItem = { itemId: string; imeiSerial: string; variantId: string; modelName: string; color: string | null; itemPriceNtd: string; basePriceNtd: string };
-type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; isVerified: boolean; priceNtd: string };
+type OrderAccessory = { accessoryRowId: string; variantId: string; accessoryName: string; isVerified: boolean; quantity: number; priceNtd: string };
 type PackingOrder = {
   orderId: string;
   orderCode: string;
@@ -118,7 +118,7 @@ export default function PackingPage() {
         if (price !== base) lineItems.push({ type: "DISCOUNT", name: `Price override on ${it.modelName}`, code: it.imeiSerial, color: "—", qty: 1, price: price - base });
       });
       o.accessories.forEach((a) => {
-        lineItems.push({ type: "ACCESSORY", name: a.accessoryName, code: a.variantId, color: "—", qty: 1, price: Number(a.priceNtd) });
+        lineItems.push({ type: "ACCESSORY", name: a.accessoryName, code: a.variantId, color: "—", qty: a.quantity, price: Number(a.priceNtd) });
       });
       const recipientInfo = `${o.customerName || ""} ${o.postalCode || ""} ${o.shippingAddress || ""}`;
       lineItems.forEach((li, idx) => {

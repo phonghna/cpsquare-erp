@@ -43,9 +43,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
           [randomUUID(), row.imei_serial, orderId, session.userId]
         );
       }
-      const accs = await client.query(`SELECT variant_id FROM order_accessories WHERE order_id = $1`, [orderId]);
+      const accs = await client.query(`SELECT variant_id, quantity FROM order_accessories WHERE order_id = $1`, [orderId]);
       for (const row of accs.rows) {
-        await client.query(`UPDATE product_variants SET stock_quantity = stock_quantity + 1, reserved_quantity = GREATEST(0, reserved_quantity - 1) WHERE variant_id = $1`, [row.variant_id]);
+        await client.query(`UPDATE product_variants SET stock_quantity = stock_quantity + $1, reserved_quantity = GREATEST(0, reserved_quantity - $1) WHERE variant_id = $2`, [row.quantity, row.variant_id]);
       }
     }
 

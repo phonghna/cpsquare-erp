@@ -43,7 +43,10 @@ export async function GET() {
       .map((i) => ({ ...i, modelName: variantById.get(i.variantId)?.modelName || i.variantId, basePriceNtd: variantById.get(i.variantId)?.sellingPriceNtd || i.itemPriceNtd })),
     accessories: accessories
       .filter((a) => a.orderId === o.orderId)
-      .map((a) => ({ ...a, priceNtd: variantById.get(a.variantId)?.sellingPriceNtd || "0" })),
+      // priceNtd is the price LOCKED at order time (order_accessories.unit_price_ntd),
+      // not the current Price Book rate — a later price change shouldn't
+      // retroactively alter what ships/bills on an already-placed order.
+      .map((a) => ({ ...a, priceNtd: a.unitPriceNtd })),
   }));
 
   return NextResponse.json({ orders: result });
