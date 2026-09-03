@@ -263,29 +263,25 @@ export default function InventoryPage() {
                       <td style={{ ...td, color: "var(--text-dim)" }}>{i.currentLocation}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
                       <td style={td}>
-                        {canOperate && i.status === "IN_STOCK" && (
-                          <>
-                            <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>Check-out live</ActionBtn>
-                            <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>Media hold</ActionBtn>
-                          </>
-                        )}
-                        {canOperate && i.status === "CHECKED_OUT_LIVE" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>Check-in shelf</ActionBtn>}
-                        {canOperate && i.status === "MEDIA_HOLD" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>Release hold</ActionBtn>}
-                        {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
-                        {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                          <ActionBtn busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>
-                            → {WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}
-                          </ActionBtn>
-                        )}
-                        {canSetStatus && (
-                          <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>
-                        )}
-                        {canManage && (
-                          <button onClick={() => setEditTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>✎ Edit details</button>
-                        )}
-                        {canManage && i.status === "IN_STOCK" && (
-                          <button onClick={() => { setDeleteError(""); setDeleteTarget(i); }} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
-                        )}
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                          {canOperate && i.status === "IN_STOCK" && (
+                            <>
+                              <IconBtn title="Check-out live" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>🎥</IconBtn>
+                              <IconBtn title="Media hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>📸</IconBtn>
+                            </>
+                          )}
+                          {canOperate && i.status === "CHECKED_OUT_LIVE" && <IconBtn title="Check-in to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>↩️</IconBtn>}
+                          {canOperate && i.status === "MEDIA_HOLD" && <IconBtn title="Release hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>🔓</IconBtn>}
+                          {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
+                          {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                            <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
+                          )}
+                          {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
+                          {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
+                          {canManage && i.status === "IN_STOCK" && (
+                            <IconBtn title="Delete" danger busy={busy === i.imeiSerial} onClick={() => { setDeleteError(""); setDeleteTarget(i); }}>🗑</IconBtn>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -328,14 +324,14 @@ export default function InventoryPage() {
                       <td style={td}>{i.order?.marketCode || "—"}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
                       <td style={td}>
-                        {canOperate && i.status === "RESERVED" && <ActionBtn busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>Unassign / Return to shelf</ActionBtn>}
-                        {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                          <ActionBtn busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>
-                            → {WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}
-                          </ActionBtn>
-                        )}
-                        {canSetStatus && <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>}
-                        {canManage && <button onClick={() => setEditTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>✎ Edit details</button>}
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                          {canOperate && i.status === "RESERVED" && <IconBtn title="Unassign / Return to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>↩️</IconBtn>}
+                          {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                            <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
+                          )}
+                          {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
+                          {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -505,9 +501,29 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
   );
 }
 
-function ActionBtn({ children, onClick, busy }: { children: React.ReactNode; onClick: () => void; busy: boolean }) {
+// Compact icon-only action button — hover shows `title` as a native tooltip.
+// Replaces the old wide text buttons (Check-out live, Media hold, Set
+// status, ...) which wrapped onto 2-3 lines per row once every row action
+// was added; icons keep the whole action toolbar on a single line.
+function IconBtn({
+  children, onClick, busy, title, danger, disabled,
+}: { children: React.ReactNode; onClick: () => void; busy?: boolean; title: string; danger?: boolean; disabled?: boolean }) {
+  const isDisabled = !!busy || !!disabled;
   return (
-    <button onClick={onClick} disabled={busy} style={{ ...btnGhost, marginRight: 6, opacity: busy ? 0.4 : 1 }}>
+    <button
+      onClick={onClick}
+      disabled={isDisabled}
+      title={title}
+      aria-label={title}
+      style={{
+        ...btnGhost,
+        padding: "6px 9px",
+        fontSize: 14,
+        lineHeight: 1,
+        color: danger ? "var(--danger)" : undefined,
+        opacity: isDisabled ? 0.4 : 1,
+      }}
+    >
       {busy ? "…" : children}
     </button>
   );
