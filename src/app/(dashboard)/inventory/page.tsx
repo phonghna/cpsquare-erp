@@ -65,6 +65,7 @@ export default function InventoryPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [statusTarget, setStatusTarget] = useState<Item | null>(null);
+  const [editTarget, setEditTarget] = useState<Item | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [transferring, setTransferring] = useState(false);
   const [transferError, setTransferError] = useState("");
@@ -279,6 +280,9 @@ export default function InventoryPage() {
                         {canSetStatus && (
                           <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>
                         )}
+                        {canManage && (
+                          <button onClick={() => setEditTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>✎ Edit details</button>
+                        )}
                         {canManage && i.status === "IN_STOCK" && (
                           <button onClick={() => { setDeleteError(""); setDeleteTarget(i); }} disabled={busy === i.imeiSerial} style={{ ...btnGhost, color: "var(--danger)", marginLeft: 6 }}>🗑 Delete</button>
                         )}
@@ -331,6 +335,7 @@ export default function InventoryPage() {
                           </ActionBtn>
                         )}
                         {canSetStatus && <button onClick={() => setStatusTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>Set status</button>}
+                        {canManage && <button onClick={() => setEditTarget(i)} style={{ ...btnGhost, marginLeft: 6 }}>✎ Edit details</button>}
                       </td>
                     </tr>
                   ))}
@@ -361,7 +366,78 @@ export default function InventoryPage() {
       {statusTarget && (
         <SetStatusModal item={statusTarget} onClose={() => setStatusTarget(null)} onSaved={() => { setStatusTarget(null); load(); }} />
       )}
+      {editTarget && (
+        <EditDeviceModal item={editTarget} variants={variants} onClose={() => setEditTarget(null)} onSaved={() => { setEditTarget(null); load(); }} />
+      )}
     </div>
+  );
+}
+
+function EditDeviceModal({ item, variants, onClose, onSaved }: { item: Item; variants: Variant[]; onClose: () => void; onSaved: () => void }) {
+  const [imeiSerial, setImeiSerial] = useState(item.imeiSerial);
+  const [variantId, setVariantId] = useState(item.variantId);
+  const [battery, setBattery] = useState(item.batteryHealth ?? 0);
+  const [cosmetic, setCosmetic] = useState(item.cosmeticCondition || "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const imeiChanged = imeiSerial.trim() !== item.imeiSerial;
+
+  async function submit() {
+    if (!imeiSerial.trim() || !variantId) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/inventory/${item.imeiSerial}/edit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || `Failed to update device (HTTP ${res.status}).`); return; }
+      onSaved();
+    } catch (err: any) {
+      setError(err?.message || "Network error — failed to update device.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Edit Device Details">
+      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 14 }}>
+        Correct a data-entry mistake — model, battery %, cosmetic condition, or even the IMEI itself.
+      </div>
+      <Field label="Model / Color">
+        <SearchCombobox
+          options={variants.map((p) => ({ ...p, __key: p.variantId }))}
+          value={variantId}
+          onSelect={(v) => setVariantId(v)}
+          placeholder="e.g. iPhone 15 Pro 128GB Blue"
+          searchText={(p) => `${p.modelName} ${p.color}`}
+          renderLabel={(p) => `${p.modelName} — ${p.color || "—"} (${fmt(p.sellingPriceNtd)})`}
+        />
+      </Field>
+      <div style={{ height: 10 }} />
+      <Field label="IMEI">
+        <input value={imeiSerial} onChange={(e) => setImeiSerial(e.target.value)} placeholder="15-digit IMEI" className="mono" style={inputStyle} />
+      </Field>
+      {imeiChanged && (
+        <div style={{ fontSize: 11.5, color: "var(--warn)", marginTop: 6 }}>
+          Changing the IMEI will also update any linked order and history records to the new number.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <Field label="Battery %"><input type="number" value={battery} onChange={(e) => setBattery(Number(e.target.value))} style={inputStyle} /></Field>
+        <Field label="Cosmetic condition"><input value={cosmetic} onChange={(e) => setCosmetic(e.target.value)} style={inputStyle} /></Field>
+      </div>
+      {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={btnGhost}>Cancel</button>
+        <button disabled={submitting || !imeiSerial.trim() || !variantId} onClick={submit} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+          {submitting ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 
