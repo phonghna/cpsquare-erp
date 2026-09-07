@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { StatusPill, SHIPMENT_META, Card, Empty, ModalShell, Field, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
+import { StatusPill, SHIPMENT_META, Card, Empty, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
 
 const MARKETS = ["VN", "ID", "TH", "PH"];
@@ -36,6 +36,9 @@ export default function OrdersPage() {
   const [formMode, setFormMode] = useState<null | { mode: "create" } | { mode: "edit"; order: Order }>(null);
   const [cancelling, setCancelling] = useState<Order | null>(null);
   const [confirmReturn, setConfirmReturn] = useState<Order | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
@@ -57,6 +60,7 @@ export default function OrdersPage() {
 
   const canCreate = ["ADMIN", "MANAGER", "CS", "STREAMER"].includes(role);
   const canEdit = canCreate;
+  const isAdmin = role === "ADMIN";
 
   async function clickEdit(order: Order) {
     if (order.shipmentStatus === "PACKED") { setConfirmReturn(order); return; }
@@ -78,6 +82,23 @@ export default function OrdersPage() {
     if (!res.ok) { setError(data.error || "Failed to cancel."); setCancelling(null); return; }
     setCancelling(null);
     load();
+  }
+
+  async function confirmDeleteOrder() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/orders/${deleteTarget.orderId}/delete`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setDeleteError(data.error || `Failed to delete order (HTTP ${res.status}).`); return; }
+      setDeleteTarget(null);
+      load();
+    } catch (err: any) {
+      setDeleteError(err?.message || "Network error — failed to delete order.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -122,9 +143,20 @@ export default function OrdersPage() {
                       <td style={{ ...td, fontWeight: 600 }} className="mono">{fmt(o.totalInvoiceAmountNtd)}</td>
                       <td style={td}><StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} /></td>
                       <td style={td}>
-                        {editable && <button onClick={() => clickEdit(o)} style={{ ...btnGhost, marginRight: 6 }}>✎ Edit</button>}
-                        {cancellable && <button onClick={() => setCancelling(o)} style={{ ...btnGhost, color: "var(--danger)" }}>Cancel</button>}
-                        {!editable && !cancellable && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>Locked</span>}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          {editable && <button onClick={() => clickEdit(o)} style={btnGhost}>✎ Edit</button>}
+                          {cancellable && <button onClick={() => setCancelling(o)} style={{ ...btnGhost, color: "var(--danger)" }}>Cancel</button>}
+                          {!editable && !cancellable && !isAdmin && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>Locked</span>}
+                          {isAdmin && (
+                            <button
+                              onClick={() => { setDeleteError(""); setDeleteTarget(o); }}
+                              title="Permanently delete this order"
+                              style={{ ...btnGhost, color: "var(--danger)" }}
+                            >
+                              🗑 Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -145,6 +177,23 @@ export default function OrdersPage() {
         />
       )}
       {cancelling && <CancelOrderModal order={cancelling} onClose={() => setCancelling(null)} onConfirm={confirmCancel} />}
+      {deleteTarget && (
+        <ConfirmModal
+          title={`Permanently delete order ${deleteTarget.orderCode}?`}
+          message={
+            <>
+              This <strong>cannot be undone</strong> — the order and its full history (logs, payment schedule, price-override records) will be erased. Every phone/accessory it claimed will be released back to Available Stock, regardless of its current status (even if already Shipped, Delivered, or Returned.)
+              <br /><br />
+              Only use this for a mistaken or test order. For a real completed sale, use <strong>Cancel</strong> instead — it keeps the order on record.
+              {deleteError && <div style={{ color: "var(--danger)", marginTop: 10 }}>{deleteError}</div>}
+            </>
+          }
+          confirmLabel="Delete order permanently"
+          busy={deleting}
+          onConfirm={confirmDeleteOrder}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
       {confirmReturn && (
         <ModalShell onClose={() => setConfirmReturn(null)} title={`Return parcel to inspection — ${confirmReturn.orderCode}`}>
           <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 16 }}>
