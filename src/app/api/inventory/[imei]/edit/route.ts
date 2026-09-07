@@ -10,11 +10,6 @@ import { getSession, canAccessPage } from "@/lib/auth";
 // stores its own locked variant_id/item_price_ntd snapshot at order time,
 // so correcting product_items' catalog identity later doesn't retroactively
 // alter a past order.
-//
-// Renaming the IMEI cascades the new value into order_items and imei_logs,
-// which mirror imei_serial as plain text (no DB-level foreign key — see
-// schema.ts, nothing uses .references()), so those rows would otherwise
-// silently keep pointing at a serial number that no longer exists.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ imei: string }> }) {
   const { imei } = await params;
   const session = await getSession();
@@ -32,15 +27,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
     return NextResponse.json({ error: "IMEI and model are required." }, { status: 400 });
   }
 
+  const battery = batteryHealth === null || batteryHealth === undefined || batteryHealth === "" ? null : Number(batteryHealth);
+  const cosmetic = cosmeticCondition ? String(cosmeticCondition) : null;
+
   const pool = getPool();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const current = await client.query(`SELECT imei_serial FROM product_items WHERE imei_serial = $1 FOR UPDATE`, [imei]);
+    const current = await client.query(`SELECT * FROM product_items WHERE imei_serial = $1 FOR UPDATE`, [imei]);
     if (current.rowCount === 0) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "IMEI not found." }, { status: 404 });
     }
+    const row = current.rows[0];
 
     const variant = await client.query(`SELECT variant_id FROM product_variants WHERE variant_id = $1 AND is_serialized = TRUE`, [variantId]);
     if (variant.rowCount === 0) {
@@ -48,34 +47,54 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ime
       return NextResponse.json({ error: `Model "${variantId}" does not exist.` }, { status: 400 });
     }
 
-    if (newImei !== imei) {
-      const dup = await client.query(`SELECT 1 FROM product_items WHERE imei_serial = $1`, [newImei]);
-      if ((dup.rowCount ?? 0) > 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: `IMEI ${newImei} already exists in the system.` }, { status: 409 });
-      }
+    if (newImei === imei) {
+      // No IMEI change — a plain in-place update, no foreign-key concerns.
+      await client.query(
+        `UPDATE product_items SET variant_id = $1, battery_health = $2, cosmetic_condition = $3, updated_by_user_id = $4, updated_at = now() WHERE imei_serial = $5`,
+        [variantId, battery, cosmetic, session.userId, imei]
+      );
+      await client.query("COMMIT");
+      return NextResponse.json({ ok: true, imeiSerial: newImei });
     }
 
-    const battery = batteryHealth === null || batteryHealth === undefined || batteryHealth === "" ? null : Number(batteryHealth);
-    const cosmetic = cosmeticCondition ? String(cosmeticCondition) : null;
+    // Renaming the primary key is trickier than it looks: order_items has a
+    // real foreign key on imei_serial (order_items_imei_serial_fkey) —
+    // discovered when a delete on a previously-ordered device hit it. That
+    // FK is checked immediately (not deferrable), so neither ordering of a
+    // plain UPDATE works: changing product_items.imei_serial first leaves
+    // any order_items row still pointing at a value that no longer exists
+    // in the parent table; repointing order_items to the new value first
+    // fails because that new parent row doesn't exist yet. The safe
+    // sequence is insert-new-parent -> repoint-children -> delete-old-parent,
+    // so a valid parent row exists at every step.
+    const dup = await client.query(`SELECT 1 FROM product_items WHERE imei_serial = $1`, [newImei]);
+    if ((dup.rowCount ?? 0) > 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: `IMEI ${newImei} already exists in the system.` }, { status: 409 });
+    }
 
     await client.query(
-      `UPDATE product_items
-       SET imei_serial = $1, variant_id = $2, battery_health = $3, cosmetic_condition = $4,
-           updated_by_user_id = $5, updated_at = now()
-       WHERE imei_serial = $6`,
-      [newImei, variantId, battery, cosmetic, session.userId, imei]
+      `INSERT INTO product_items
+         (imei_serial, variant_id, battery_health, cosmetic_condition, status, current_location,
+          order_id, rma_stage, remark, status_updated_at, warehouse_code, updated_by_user_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())`,
+      [
+        newImei, variantId, battery, cosmetic, row.status, row.current_location,
+        row.order_id, row.rma_stage, row.remark, row.status_updated_at, row.warehouse_code,
+        session.userId, row.created_at,
+      ]
     );
-
-    if (newImei !== imei) {
-      await client.query(`UPDATE order_items SET imei_serial = $1 WHERE imei_serial = $2`, [newImei, imei]);
-      await client.query(`UPDATE imei_logs SET imei_serial = $1 WHERE imei_serial = $2`, [newImei, imei]);
-    }
+    await client.query(`UPDATE order_items SET imei_serial = $1 WHERE imei_serial = $2`, [newImei, imei]);
+    await client.query(`UPDATE imei_logs SET imei_serial = $1 WHERE imei_serial = $2`, [newImei, imei]);
+    await client.query(`DELETE FROM product_items WHERE imei_serial = $1`, [imei]);
 
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, imeiSerial: newImei });
   } catch (err: any) {
     await client.query("ROLLBACK");
+    if (err?.code === "23505") {
+      return NextResponse.json({ error: `IMEI ${newImei} already exists in the system.` }, { status: 409 });
+    }
     return NextResponse.json({ error: err.message || "Failed to update device." }, { status: 500 });
   } finally {
     client.release();
