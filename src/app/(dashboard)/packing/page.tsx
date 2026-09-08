@@ -68,6 +68,17 @@ export default function PackingPage() {
   }
   useEffect(() => { load(); }, []);
 
+  // Coming here via the global camera-scan search button (found an order
+  // that's awaiting packing) lands with ?openOrder=<orderId> — jump straight
+  // into that order's Scan & Pack modal once the queue has loaded.
+  useEffect(() => {
+    if (typeof window === "undefined" || orders.length === 0) return;
+    const targetId = new URLSearchParams(window.location.search).get("openOrder");
+    if (!targetId) return;
+    const target = orders.find((o) => o.orderId === targetId);
+    if (target) setActive(target);
+  }, [orders]);
+
   const buckets = useMemo(() => {
     const map: Record<string, PackingOrder[]> = { "711": [], FAMILY: [], TCAT: [] };
     for (const o of orders) {

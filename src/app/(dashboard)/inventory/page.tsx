@@ -92,6 +92,15 @@ export default function InventoryPage() {
   }
   useEffect(() => { load(); }, []);
 
+  // Coming here via the global camera-scan search button lands with
+  // ?q=<imei> — prefill the search box so the scanned device shows up
+  // immediately without the user retyping anything.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const scanned = new URLSearchParams(window.location.search).get("q");
+    if (scanned) setQ(scanned);
+  }, []);
+
   function pickStatusFilter(v: string) {
     setStatusFilter(v);
     if (v) setTab(AVAILABLE_STATUSES.includes(v) ? "available" : "reserved");

@@ -40,6 +40,15 @@ export default function OrdersPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
+  const [q, setQ] = useState("");
+
+  // Coming here via the global camera-scan search button (found an order
+  // that isn't awaiting packing) lands with ?q=<orderCode> — prefill search.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const scanned = new URLSearchParams(window.location.search).get("q");
+    if (scanned) setQ(scanned);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -61,6 +70,17 @@ export default function OrdersPage() {
   const canCreate = ["ADMIN", "MANAGER", "CS", "STREAMER"].includes(role);
   const canEdit = canCreate;
   const isAdmin = role === "ADMIN";
+
+  const filteredOrders = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return orders;
+    return orders.filter((o) =>
+      o.orderCode.toLowerCase().includes(query) ||
+      o.customerName.toLowerCase().includes(query) ||
+      (o.customerPhone || "").toLowerCase().includes(query) ||
+      (o.customerSocialHandle || "").toLowerCase().includes(query)
+    );
+  }, [orders, q]);
 
   async function clickEdit(order: Order) {
     if (order.shipmentStatus === "PACKED") { setConfirmReturn(order); return; }
@@ -111,6 +131,15 @@ export default function OrdersPage() {
         {canCreate && <button onClick={() => setFormMode({ mode: "create" })} style={btnPrimary}>+ New Order</button>}
       </div>
 
+      <div className="mb-4">
+        <input
+          placeholder="Search by order code, customer name, phone, or handle..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          style={{ ...inputStyle, maxWidth: 360 }}
+        />
+      </div>
+
       {error && <div className="text-sm mb-3" style={{ color: "var(--danger)" }}>{error}</div>}
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
@@ -118,6 +147,8 @@ export default function OrdersPage() {
           <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading…</div>
         ) : orders.length === 0 ? (
           <Empty title="No orders yet" sub="Create the first order to see the workflow in action." />
+        ) : filteredOrders.length === 0 ? (
+          <Empty title="No orders match" sub="Try a different search." />
         ) : (
           <div className="desktop-table" style={{ overflowX: "auto" }}>
             <table style={tableStyle}>
@@ -129,7 +160,7 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => {
+                {filteredOrders.map((o) => {
                   const editable = canEdit && ["PENDING_PACK", "PACKED"].includes(o.shipmentStatus);
                   const cancellable = canEdit && !NOT_CANCELLABLE.includes(o.shipmentStatus);
                   return (
@@ -167,9 +198,9 @@ export default function OrdersPage() {
         )}
       </Card>
 
-      {!loading && orders.length > 0 && (
+      {!loading && filteredOrders.length > 0 && (
         <div className="mobile-cards">
-          {orders.map((o) => {
+          {filteredOrders.map((o) => {
             const editable = canEdit && ["PENDING_PACK", "PACKED"].includes(o.shipmentStatus);
             const cancellable = canEdit && !NOT_CANCELLABLE.includes(o.shipmentStatus);
             return (

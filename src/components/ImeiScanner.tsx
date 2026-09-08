@@ -90,7 +90,7 @@ export function ImeiScanField({
   );
 }
 
-function CameraScanModal({ onDetect, onClose }: { onDetect: (text: string) => void; onClose: () => void }) {
+export function CameraScanModal({ onDetect, onClose, title = "Scan IMEI via camera" }: { onDetect: (text: string) => void; onClose: () => void; title?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState("");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -154,7 +154,7 @@ function CameraScanModal({ onDetect, onClose }: { onDetect: (text: string) => vo
     >
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: 16, width: 380, maxWidth: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div className="disp" style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>Scan IMEI via camera</div>
+          <div className="disp" style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{title}</div>
           <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "var(--text-dim)" }}>✕</button>
         </div>
         {error ? (

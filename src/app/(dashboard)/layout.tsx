@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import BottomTabBar from "@/components/BottomTabBar";
+import GlobalScanButton from "@/components/GlobalScanButton";
 import { MobileNavProvider } from "@/components/MobileNav";
 
 const NAV_DEFS: { id: string; label: string; href: string; icon: string }[] = [
@@ -54,6 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <div className="page-content" style={{ padding: "22px 26px 60px", flex: 1 }}>{children}</div>
         </div>
         <BottomTabBar items={items} />
+        <GlobalScanButton />
       </div>
     </MobileNavProvider>
   );

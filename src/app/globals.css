@@ -124,6 +124,45 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Global camera-scan search button — floats above content on every page */
+.global-scan-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 22px;
+  box-shadow: 0 8px 24px rgba(0, 184, 169, 0.45);
+  cursor: pointer;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.global-scan-btn:active {
+  transform: scale(0.94);
+}
+.global-scan-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  z-index: 145;
+  cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .sidebar {
     position: fixed !important;
@@ -169,6 +208,13 @@ html, body {
   }
   .page-content {
     padding: 14px 12px calc(78px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .global-scan-btn {
+    bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+  }
+  .global-scan-toast {
+    bottom: calc(144px + env(safe-area-inset-bottom)) !important;
   }
 
   .bottom-tabbar {
