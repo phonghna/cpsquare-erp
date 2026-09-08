@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { StatusPill, SHIPMENT_META, Card, Empty, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
+import { StatusPill, SHIPMENT_META, Card, Empty, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost, tableStyle, th, td, MobileCard, CardHeader, CardRow, CardActions } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
 
 const MARKETS = ["VN", "ID", "TH", "PH"];
@@ -119,7 +119,7 @@ export default function OrdersPage() {
         ) : orders.length === 0 ? (
           <Empty title="No orders yet" sub="Create the first order to see the workflow in action." />
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="desktop-table" style={{ overflowX: "auto" }}>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -166,6 +166,47 @@ export default function OrdersPage() {
           </div>
         )}
       </Card>
+
+      {!loading && orders.length > 0 && (
+        <div className="mobile-cards">
+          {orders.map((o) => {
+            const editable = canEdit && ["PENDING_PACK", "PACKED"].includes(o.shipmentStatus);
+            const cancellable = canEdit && !NOT_CANCELLABLE.includes(o.shipmentStatus);
+            return (
+              <MobileCard key={o.orderId}>
+                <CardHeader>
+                  <div>
+                    <div className="mono" style={{ fontWeight: 700, fontSize: 14 }}>{o.orderCode}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{o.customerName}</div>
+                  </div>
+                  <StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} />
+                </CardHeader>
+                <CardRow label="Channel" value={o.salesChannel} />
+                <CardRow label="Items" value={`${o.items.length} phone${o.items.length > 1 ? "s" : ""}${o.accessories.length ? ` + ${o.accessories.length} acc.` : ""}`} />
+                <CardRow label="Carrier" value={CARRIERS.find((c) => c.code === o.carrierService)?.name || "—"} />
+                <CardRow label="Payment" value={PAYMENT_TYPES.find((p) => p.code === o.paymentType)?.label.split(" ")[0] || "—"} />
+                <CardRow label="Total" value={<span className="mono">{fmt(o.totalInvoiceAmountNtd)}</span>} />
+                {(editable || cancellable || isAdmin) && (
+                  <CardActions>
+                    {editable && <button onClick={() => clickEdit(o)} style={btnGhost}>✎ Edit</button>}
+                    {cancellable && <button onClick={() => setCancelling(o)} style={{ ...btnGhost, color: "var(--danger)" }}>Cancel</button>}
+                    {!editable && !cancellable && !isAdmin && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>Locked</span>}
+                    {isAdmin && (
+                      <button
+                        onClick={() => { setDeleteError(""); setDeleteTarget(o); }}
+                        title="Permanently delete this order"
+                        style={{ ...btnGhost, color: "var(--danger)" }}
+                      >
+                        🗑 Delete
+                      </button>
+                    )}
+                  </CardActions>
+                )}
+              </MobileCard>
+            );
+          })}
+        </div>
+      )}
 
       {formMode && (
         <OrderFormModal
@@ -377,7 +418,7 @@ function OrderFormModal({
         <div className="p-10 text-center text-sm" style={{ color: "var(--text-faint)" }}>Loading catalog…</div>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+          <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
             <Field label="Market">
               <select value={marketCode} onChange={(e) => setMarketCode(e.target.value)} style={inputStyle}>
                 {MARKETS.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -419,7 +460,7 @@ function OrderFormModal({
                   </span>
                   {rows.length > 1 && <button onClick={() => removeRow(row.rid)} style={{ border: "none", background: "none", color: "var(--danger)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Remove ✕</button>}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <Field label="Model / Color (type to search)">
                     <SearchCombobox
                       options={variants.map((p) => ({ ...p, __key: p.variantId }))}
@@ -489,7 +530,7 @@ function OrderFormModal({
                   <span style={{ fontSize: 12, fontWeight: 700 }}>Accessory #{idx + 1}</span>
                   <button onClick={() => removeAccRow(row.arid)} style={{ border: "none", background: "none", color: "var(--danger)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Remove ✕</button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
+                <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
                   <Field label="Accessory (type to search)">
                     <SearchCombobox
                       options={compatibleAccessories.map((p) => ({ ...p, __key: p.variantId }))}

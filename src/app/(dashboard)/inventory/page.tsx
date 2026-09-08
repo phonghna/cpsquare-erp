@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   StatusPill, STATUS_META, Card, Empty, Tabs, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost,
-  tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS,
+  tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS, MobileCard, CardHeader, CardRow, CardActions,
 } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
 import { WAREHOUSE_CODES, WAREHOUSE_SHORT_LABELS, WAREHOUSE_SITTING_STATUSES, otherWarehouse } from "@/lib/warehouse";
@@ -231,7 +231,7 @@ export default function InventoryPage() {
       ) : tab === "available" ? (
         <Card style={{ padding: 0, overflow: "hidden" }}>
           {available.length === 0 ? <Empty title="No devices match" /> : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="desktop-table" style={{ overflowX: "auto" }}>
               <table style={tableStyle}>
                 <thead>
                   <tr>
@@ -289,11 +289,53 @@ export default function InventoryPage() {
               </table>
             </div>
           )}
+          {available.length > 0 && (
+            <div className="mobile-cards" style={{ padding: 10 }}>
+              {available.map((i) => (
+                <MobileCard key={i.imeiSerial}>
+                  <CardHeader>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      {WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                        <input type="checkbox" checked={selected.has(i.imeiSerial)} onChange={() => toggleSelected(i.imeiSerial)} style={{ marginTop: 3 }} />
+                      )}
+                      <div>
+                        <div className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>{i.imeiSerial}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{i.variant?.modelName} · {i.variant?.color}</div>
+                      </div>
+                    </div>
+                    <StatusPill status={i.status} meta={STATUS_META} />
+                  </CardHeader>
+                  <CardRow label="Battery" value={`${i.batteryHealth ?? "—"}%`} />
+                  <CardRow label="Cosmetic" value={i.cosmeticCondition || "—"} />
+                  <CardRow label="Location" value={i.currentLocation} />
+                  <CardActions>
+                    {canOperate && i.status === "IN_STOCK" && (
+                      <>
+                        <IconBtn title="Check-out live" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>🎥</IconBtn>
+                        <IconBtn title="Media hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>📸</IconBtn>
+                      </>
+                    )}
+                    {canOperate && i.status === "CHECKED_OUT_LIVE" && <IconBtn title="Check-in to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>↩️</IconBtn>}
+                    {canOperate && i.status === "MEDIA_HOLD" && <IconBtn title="Release hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>🔓</IconBtn>}
+                    {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
+                    {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                      <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
+                    )}
+                    {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
+                    {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
+                    {canManage && i.status === "IN_STOCK" && (
+                      <IconBtn title="Delete" danger busy={busy === i.imeiSerial} onClick={() => { setDeleteError(""); setDeleteTarget(i); }}>🗑</IconBtn>
+                    )}
+                  </CardActions>
+                </MobileCard>
+              ))}
+            </div>
+          )}
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: "hidden" }}>
           {reserved.length === 0 ? <Empty title="No IMEIs reserved for orders" /> : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="desktop-table" style={{ overflowX: "auto" }}>
               <table style={tableStyle}>
                 <thead><tr><th style={th}>IMEI</th><th style={th}>Product / Color</th><th style={th}>Order Number</th><th style={th}>Customer</th><th style={th}>Market</th><th style={th}>Progress</th><th style={th}></th></tr></thead>
                 <tbody>
@@ -337,6 +379,42 @@ export default function InventoryPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {reserved.length > 0 && (
+            <div className="mobile-cards" style={{ padding: 10 }}>
+              {reserved.map((i) => (
+                <MobileCard key={i.imeiSerial}>
+                  <CardHeader>
+                    <div>
+                      <div className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>{i.imeiSerial}</div>
+                      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{i.variant?.modelName} · {i.variant?.color}</div>
+                      {i.remark && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>{i.remark}</span>
+                          {canSetStatus && (
+                            <button onClick={() => setStatusTarget(i)} style={{ border: "none", background: "none", padding: 0, fontSize: 11, color: "var(--accent-dark)", cursor: "pointer", flexShrink: 0 }}>
+                              ✎ Edit
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <StatusPill status={i.status} meta={STATUS_META} />
+                  </CardHeader>
+                  <CardRow label="Order" value={<span className="mono">{i.order?.orderCode || "—"}</span>} />
+                  <CardRow label="Customer" value={i.order ? `${i.order.customerName}${i.order.customerSocialHandle ? ` (${i.order.customerSocialHandle})` : ""}` : "—"} />
+                  <CardRow label="Market" value={i.order?.marketCode || "—"} />
+                  <CardActions>
+                    {canOperate && i.status === "RESERVED" && <IconBtn title="Unassign / Return to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>↩️</IconBtn>}
+                    {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
+                      <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
+                    )}
+                    {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
+                    {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
+                  </CardActions>
+                </MobileCard>
+              ))}
             </div>
           )}
         </Card>
@@ -422,7 +500,7 @@ function EditDeviceModal({ item, variants, onClose, onSaved }: { item: Item; var
           Changing the IMEI will also update any linked order and history records to the new number.
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+      <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
         <Field label="Battery %"><input type="number" value={battery} onChange={(e) => setBattery(Number(e.target.value))} style={inputStyle} /></Field>
         <Field label="Cosmetic condition"><input value={cosmetic} onChange={(e) => setCosmetic(e.target.value)} style={inputStyle} /></Field>
       </div>
@@ -595,7 +673,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
       )}
       <div style={{ height: 10 }} />
       <Field label="IMEI"><input value={imeiSerial} onChange={(e) => setImei(e.target.value)} placeholder="15-digit IMEI" style={inputStyle} /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+      <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
         <Field label="Battery %"><input type="number" value={battery} onChange={(e) => setBattery(Number(e.target.value))} style={inputStyle} /></Field>
         <Field label="Cosmetic condition"><input value={cosmetic} onChange={(e) => setCosmetic(e.target.value)} style={inputStyle} /></Field>
         <Field label="Warehouse" full>

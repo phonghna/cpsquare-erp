@@ -169,7 +169,7 @@ export default function PackingPage() {
                 </div>
                 {list.length === 0 && <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No orders in this bucket.</div>}
                 {list.map((o) => (
-                  <div key={o.orderId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+                  <div key={o.orderId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border)", flexWrap: "wrap", gap: 8 }}>
                     <div>
                       <div className="mono" style={{ fontSize: 12.5, fontWeight: 700 }}>{o.orderCode}</div>
                       <div style={{ fontSize: 12.5, color: "var(--text-dim)" }}>{o.items.length} phone(s) → {o.customerName}</div>
@@ -275,7 +275,7 @@ function PackScanModal({
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Dynamic accessory checklist
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+          <div className="mobile-stack-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {order.accessories.map((a) => (
               <label key={a.accessoryRowId} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "#fff" }}>
                 <input

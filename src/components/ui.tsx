@@ -138,8 +138,9 @@ export function Field({ label, children, full }: { label: string; children: Reac
 
 export function ModalShell({ title, children, onClose, wide }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,18,23,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, padding: 16 }}>
+    <div className="modal-overlay" onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,18,23,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, padding: 16 }}>
       <div
+        className="modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{ background: "#fff", borderRadius: 14, padding: 24, width: "100%", maxWidth: wide ? 680 : 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
       >
@@ -160,8 +161,8 @@ export function ConfirmModal({
   onConfirm: () => void; onClose: () => void;
 }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,18,23,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+    <div className="modal-overlay" onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,18,23,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
+      <div className="confirm-panel" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
         <div className="disp" style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
         <div style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5 }}>{message}</div>
         <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
@@ -209,3 +210,41 @@ export function VariantDraftFields({ draft, setDraft }: { draft: VariantDraft; s
 export const th: React.CSSProperties = { textAlign: "left", padding: "11px 16px", fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.03em", borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" };
 export const td: React.CSSProperties = { padding: "11px 16px", borderBottom: "1px solid var(--border)" };
 export const tableStyle: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13 };
+
+/* Mobile card-list primitives — used to render a table's rows as cards on small screens.
+   Wrap the <table> (or its scroll div) in className="desktop-table" and add a sibling
+   className="mobile-cards" containing one MobileCard per row; CSS toggles which is visible. */
+export const mobileCardStyle: React.CSSProperties = { background: "#fff", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 14px 12px" };
+
+export function MobileCard({ children, onClick, style }: { children: React.ReactNode; onClick?: () => void; style?: React.CSSProperties }) {
+  return (
+    <div style={{ ...mobileCardStyle, ...(onClick ? { cursor: "pointer" } : {}), ...style }} onClick={onClick}>
+      {children}
+    </div>
+  );
+}
+
+export function CardRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontSize: 12.5, padding: "4px 0" }}>
+      <span style={{ color: "var(--text-dim)" }}>{label}</span>
+      <span style={{ fontWeight: 600, textAlign: "right" }}>{value}</span>
+    </div>
+  );
+}
+
+export function CardHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+      {children}
+    </div>
+  );
+}
+
+export function CardActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+      {children}
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { StatusPill, SHIPMENT_META, Card, Empty, inputStyle, btnPrimary, btnGhost, tableStyle, th, td } from "@/components/ui";
+import { StatusPill, SHIPMENT_META, Card, Empty, inputStyle, btnPrimary, btnGhost, tableStyle, th, td, MobileCard, CardHeader, CardRow, CardActions } from "@/components/ui";
 
 type Order = {
   orderId: string;
@@ -204,7 +204,7 @@ export default function TrackingPage() {
             {filteredAwaiting.length === 0 ? (
               <Empty title="Nothing to track yet" />
             ) : (
-              <div style={{ overflowX: "auto" }}>
+              <div className="desktop-table" style={{ overflowX: "auto" }}>
                 <table style={tableStyle}>
                   <thead>
                     <tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Carrier</th><th style={th}>Tracking number</th><th style={th}></th></tr>
@@ -234,6 +234,34 @@ export default function TrackingPage() {
                 </table>
               </div>
             )}
+            {filteredAwaiting.length > 0 && (
+              <div className="mobile-cards" style={{ padding: 10 }}>
+                {filteredAwaiting.map((o) => (
+                  <MobileCard key={o.orderId}>
+                    <CardHeader>
+                      <div>
+                        <div className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>{o.orderCode}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{o.customerName}</div>
+                      </div>
+                    </CardHeader>
+                    <CardRow label="Carrier" value={CARRIERS.find((c) => c.code === o.carrierService)?.name || o.carrierService} />
+                    <div style={{ marginTop: 8 }}>
+                      <input
+                        placeholder="Scan or type tracking number..."
+                        value={trackingInputs[o.orderId] ?? ""}
+                        onChange={(e) => setTrackingInputs((s) => ({ ...s, [o.orderId]: e.target.value }))}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <CardActions>
+                      <button onClick={() => saveTracking(o.orderId)} disabled={rowBusy === o.orderId || !(trackingInputs[o.orderId] || "").trim()} style={{ ...btnPrimary, opacity: rowBusy === o.orderId ? 0.5 : 1, width: "100%" }}>
+                        {rowBusy === o.orderId ? "…" : "Save → SHIPPED"}
+                      </button>
+                    </CardActions>
+                  </MobileCard>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card style={{ padding: 0, overflow: "hidden" }}>
@@ -243,7 +271,7 @@ export default function TrackingPage() {
             {filteredShipped.length === 0 ? (
               <Empty title="No matching orders" />
             ) : (
-              <div style={{ overflowX: "auto" }}>
+              <div className="desktop-table" style={{ overflowX: "auto" }}>
                 <table style={tableStyle}>
                   <thead>
                     <tr><th style={th}>Order</th><th style={th}>Customer</th><th style={th}>Tracking #</th><th style={th}>Status</th><th style={th}></th></tr>
@@ -266,6 +294,29 @@ export default function TrackingPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {filteredShipped.length > 0 && (
+              <div className="mobile-cards" style={{ padding: 10 }}>
+                {filteredShipped.map((o) => (
+                  <MobileCard key={o.orderId}>
+                    <CardHeader>
+                      <div>
+                        <div className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>{o.orderCode}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{o.customerName} {o.customerSocialHandle ? `(${o.customerSocialHandle})` : ""}</div>
+                      </div>
+                      <StatusPill status={o.shipmentStatus} meta={SHIPMENT_META} />
+                    </CardHeader>
+                    <CardRow label="Tracking #" value={<span className="mono">{o.trackingNumber || "—"}</span>} />
+                    {o.shipmentStatus === "SHIPPED" && (
+                      <CardActions>
+                        <button onClick={() => markDelivered(o.orderId)} disabled={rowBusy === o.orderId} style={{ ...btnPrimary, opacity: rowBusy === o.orderId ? 0.5 : 1, width: "100%" }}>
+                          {rowBusy === o.orderId ? "…" : "Mark delivered"}
+                        </button>
+                      </CardActions>
+                    )}
+                  </MobileCard>
+                ))}
               </div>
             )}
           </Card>
