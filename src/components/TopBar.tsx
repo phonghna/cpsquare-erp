@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { PRIORITY_META } from "@/components/ui";
+import { useMobileNav } from "@/components/MobileNav";
 
 type Announcement = { announcementId: string; title: string; content: string; priority: string };
 
 export default function TopBar({ role, markets }: { role: string; markets: string[] }) {
   const [items, setItems] = useState<Announcement[]>([]);
   const [open, setOpen] = useState(false);
+  const { toggle } = useMobileNav();
 
   useEffect(() => {
     let cancelled = false;
@@ -23,8 +25,16 @@ export default function TopBar({ role, markets }: { role: string; markets: strin
   }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", background: "var(--panel)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 12.5, color: "var(--text-dim)", fontWeight: 600 }}>Market scope:</span>
+    <div className="topbar" style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", background: "var(--panel)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 10, flexWrap: "wrap" }}>
+      <button
+        onClick={toggle}
+        aria-label="Open menu"
+        className="mobile-menu-btn"
+        style={{ border: "1px solid var(--border)", background: "#fff", borderRadius: 8, width: 34, height: 34, fontSize: 16, cursor: "pointer", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+      >
+        ☰
+      </button>
+      <span className="topbar-label" style={{ fontSize: 12.5, color: "var(--text-dim)", fontWeight: 600 }}>Market scope:</span>
       <span style={{ fontSize: 12.5, fontWeight: 700, padding: "6px 12px", borderRadius: 8, background: "var(--gray-bg)", color: "var(--text)" }}>
         {markets.length === 4 ? "All markets (VN, ID, TH, PH)" : markets.join(", ")}
       </span>
@@ -42,7 +52,7 @@ export default function TopBar({ role, markets }: { role: string; markets: strin
           📣 {items.length}
         </button>
         {open && (
-          <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, maxHeight: 400, overflowY: "auto", background: "#fff", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 14px 34px rgba(0,0,0,0.16)", zIndex: 60 }}>
+          <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: "min(340px, 88vw)", maxHeight: 400, overflowY: "auto", background: "#fff", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 14px 34px rgba(0,0,0,0.16)", zIndex: 60 }}>
             <div style={{ padding: "10px 14px", fontSize: 11.5, fontWeight: 700, color: "var(--text-dim)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
               Active announcements ({items.length})
             </div>

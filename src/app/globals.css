@@ -102,3 +102,66 @@ body {
 .combo-item:hover {
   background: var(--accent-bg);
 }
+
+/* Mobile app shell */
+.sidebar-backdrop {
+  display: none;
+}
+.mobile-menu-btn {
+  display: none;
+}
+.sidebar-close-btn {
+  display: none;
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh !important;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-close-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.55);
+    z-index: 190;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .sidebar-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .mobile-menu-btn {
+    display: inline-flex !important;
+  }
+  .topbar {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+  .topbar-label {
+    display: none;
+  }
+  .page-content {
+    padding: 14px 12px 48px !important;
+  }
+}

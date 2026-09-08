@@ -5,6 +5,7 @@ import { messageRecipients } from "@/lib/schema";
 import { and, eq } from "drizzle-orm";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import { MobileNavProvider } from "@/components/MobileNav";
 
 const NAV_DEFS: { id: string; label: string; href: string; icon: string }[] = [
   { id: "dashboard", label: "Executive Dashboard", href: "/dashboard", icon: "◧" },
@@ -38,18 +39,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .where(and(eq(messageRecipients.receiverUserId, session.userId), eq(messageRecipients.isRead, false)));
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar
-        items={items}
-        displayName={session.displayName}
-        role={session.role}
-        markets={session.markets}
-        unreadMailCount={unread.length}
-      />
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <TopBar role={session.role} markets={session.markets} />
-        <div style={{ padding: "22px 26px 60px", flex: 1 }}>{children}</div>
+    <MobileNavProvider>
+      <div style={{ display: "flex", minHeight: "100vh" }}>
+        <Sidebar
+          items={items}
+          displayName={session.displayName}
+          role={session.role}
+          markets={session.markets}
+          unreadMailCount={unread.length}
+        />
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <TopBar role={session.role} markets={session.markets} />
+          <div className="page-content" style={{ padding: "22px 26px 60px", flex: 1 }}>{children}</div>
+        </div>
       </div>
-    </div>
+    </MobileNavProvider>
   );
 }
