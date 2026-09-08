@@ -8,9 +8,14 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "cap:sync": "cap sync android",
+    "cap:open": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@neondatabase/serverless": "^0.10.4",
     "@zxing/browser": "^0.2.1",
     "bcryptjs": "^2.4.3",
