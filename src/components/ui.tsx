@@ -8,7 +8,7 @@ export const STATUS_META: Record<string, { label: string; color: string; bg: str
   IN_STOCK: { label: "In Stock", color: "var(--ok)", bg: "var(--ok-bg)" },
   CHECKED_OUT_LIVE: { label: "Checked-out Live", color: "var(--info)", bg: "var(--info-bg)" },
   RESERVED: { label: "Reserved", color: "var(--warn)", bg: "var(--warn-bg)" },
-  PACKING: { label: "In Packing", color: "var(--violet)", bg: "var(--violet-bg)" },
+  PACKING: { label: "Ready", color: "var(--violet)", bg: "var(--violet-bg)" },
   SHIPPED: { label: "Shipped", color: "var(--teal2)", bg: "var(--teal2-bg)" },
   REPAIRING: { label: "Repairing", color: "var(--danger)", bg: "var(--danger-bg)" },
   MEDIA_HOLD: { label: "Media Hold", color: "#B45309", bg: "#FDF0DD" },

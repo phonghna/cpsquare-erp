@@ -33,7 +33,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "CHECKED_OUT_LIVE", label: "Checked-out Live" },
   { value: "MEDIA_HOLD", label: "Media Hold" },
   { value: "RESERVED", label: "Reserved" },
-  { value: "PACKING", label: "In Packing" },
+  { value: "PACKING", label: "Ready" },
   { value: "SHIPPED", label: "Shipped" },
   { value: "MISSING", label: "Missing" },
   { value: "WHOLESALE", label: "Wholesale" },
