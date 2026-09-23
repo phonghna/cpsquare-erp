@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { imeiSerial, variantId, batteryHealth, cosmeticCondition, warehouseCode } = body;
+  const { imeiSerial, variantId, batteryHealth, cosmeticCondition, warehouseCode, remark } = body;
   if (!imeiSerial || !variantId) {
     return NextResponse.json({ error: "IMEI and SKU are required." }, { status: 400 });
   }
@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
     currentLocation: "CPSquare Warehouse (TW)",
     warehouseCode: resolvedWarehouse,
     updatedByUserId: session.userId,
+    remark: remark && String(remark).trim() ? String(remark).trim() : null,
   });
   await db.insert(imeiLogs).values({
     logId: randomUUID(),

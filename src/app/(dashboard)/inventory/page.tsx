@@ -688,6 +688,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
   const [imeiSerial, setImei] = useState("");
   const [battery, setBattery] = useState(98);
   const [cosmetic, setCosmetic] = useState("99%");
+  const [remark, setRemark] = useState("");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<VariantDraft>({ sku: "", brand: BRANDS[0], modelName: "", storage: "", color: "", price: 0 });
   const [warehouseCode, setWarehouseCode] = useState("XINSHENG");
@@ -719,7 +720,7 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
     setError("");
     const res = await fetch("/api/inventory", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic, warehouseCode }),
+      body: JSON.stringify({ imeiSerial: imeiSerial.trim(), variantId, batteryHealth: battery, cosmeticCondition: cosmetic, warehouseCode, remark: remark.trim() }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -756,6 +757,9 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
           <select value={warehouseCode} onChange={(e) => setWarehouseCode(e.target.value)} style={inputStyle}>
             {WAREHOUSE_CODES.map((c) => <option key={c} value={c}>{WAREHOUSE_SHORT_LABELS[c]}</option>)}
           </select>
+        </Field>
+        <Field label="Remark (optional)" full>
+          <input value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="e.g. Customer requested extra bubble wrap" style={inputStyle} />
         </Field>
       </div>
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
