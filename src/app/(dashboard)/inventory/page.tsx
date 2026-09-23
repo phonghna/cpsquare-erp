@@ -290,7 +290,7 @@ export default function InventoryPage() {
                         }}
                       />
                     </th>
-                    <th style={th}>IMEI</th><th style={th}>Product</th><th style={th}>Battery</th><th style={th}>Cosmetic</th><th style={th}>Location</th><th style={th}>Status</th><th style={th}></th>
+                    <th style={th}>IMEI</th><th style={th}>Product</th><th style={th}>Battery</th><th style={th}>Cosmetic</th><th style={th}>Location</th><th style={th}>Remark</th><th style={th}>Status</th><th style={th}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,6 +306,7 @@ export default function InventoryPage() {
                       <td style={td}>{i.batteryHealth ?? "—"}%</td>
                       <td style={td}>{i.cosmeticCondition || "—"}</td>
                       <td style={{ ...td, color: "var(--text-dim)" }}>{i.currentLocation}</td>
+                      <td style={{ ...td, color: "var(--text-dim)", maxWidth: 200, whiteSpace: "normal" }}>{i.remark || "—"}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
                       <td style={td}>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
@@ -353,6 +354,7 @@ export default function InventoryPage() {
                   <CardRow label="Battery" value={`${i.batteryHealth ?? "—"}%`} />
                   <CardRow label="Cosmetic" value={i.cosmeticCondition || "—"} />
                   <CardRow label="Location" value={i.currentLocation} />
+                  <CardRow label="Remark" value={i.remark || "—"} />
                   <CardActions>
                     <ActionsMenu actions={buildAvailableActions(i)} />
                   </CardActions>
