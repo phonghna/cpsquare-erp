@@ -590,21 +590,45 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
 type MenuAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean; busy?: boolean };
 function ActionsMenu({ actions }: { actions: MenuAction[] }) {
   const [open, setOpen] = useState(false);
+  // Fixed-position coordinates computed from the trigger button on open, so
+  // the panel escapes every scrollable/clipped ancestor — the table wrapper
+  // (overflow-x: auto) and the Card around it (overflow: hidden) would
+  // otherwise cut the menu off for any row near the table's edge.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const rect = btnRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
+
   if (actions.length === 0) return <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>;
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", display: "inline-block" }}>
       <button
+        ref={btnRef}
         onClick={() => setOpen((o) => !o)}
         style={{ ...btnGhost, padding: "6px 12px", fontSize: 12.5, display: "flex", alignItems: "center", gap: 6 }}
       >
         Actions <span style={{ fontSize: 9 }}>{open ? "▲" : "▼"}</span>
       </button>
-      {open && (
+      {open && pos && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 59 }} />
           <div
             style={{
-              position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 200,
+              position: "fixed", top: pos.top, right: pos.right, minWidth: 200,
               background: "#fff", border: "1px solid var(--border)", borderRadius: 10,
               boxShadow: "0 14px 34px rgba(0,0,0,0.16)", zIndex: 60, overflow: "hidden",
             }}
