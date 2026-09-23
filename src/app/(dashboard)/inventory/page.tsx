@@ -309,26 +309,8 @@ export default function InventoryPage() {
                       <td style={{ ...td, color: "var(--text-dim)" }}>{i.currentLocation}</td>
                       <td style={{ ...td, color: "var(--text-dim)", maxWidth: 200, whiteSpace: "normal" }}>{i.remark || "—"}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
-                      <td style={td}>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                          {canOperate && i.status === "IN_STOCK" && (
-                            <>
-                              <IconBtn title="Check-out live" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>🎥</IconBtn>
-                              <IconBtn title="Media hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>📸</IconBtn>
-                            </>
-                          )}
-                          {canOperate && i.status === "CHECKED_OUT_LIVE" && <IconBtn title="Check-in to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>↩️</IconBtn>}
-                          {canOperate && i.status === "MEDIA_HOLD" && <IconBtn title="Release hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>🔓</IconBtn>}
-                          {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
-                          {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                            <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
-                          )}
-                          {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
-                          {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
-                          {canManage && i.status === "IN_STOCK" && (
-                            <IconBtn title="Delete" danger busy={busy === i.imeiSerial} onClick={() => { setDeleteError(""); setDeleteTarget(i); }}>🗑</IconBtn>
-                          )}
-                        </div>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        <ActionsMenu actions={buildAvailableActions(i)} />
                       </td>
                     </tr>
                   ))}
@@ -397,15 +379,8 @@ export default function InventoryPage() {
                       <td style={td}>{i.order ? `${i.order.customerName}${i.order.customerSocialHandle ? ` (${i.order.customerSocialHandle})` : ""}` : "—"}</td>
                       <td style={td}>{i.order?.marketCode || "—"}</td>
                       <td style={td}><StatusPill status={i.status} meta={STATUS_META} /></td>
-                      <td style={td}>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                          {canOperate && i.status === "RESERVED" && <IconBtn title="Unassign / Return to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>↩️</IconBtn>}
-                          {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                            <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
-                          )}
-                          {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
-                          {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
-                        </div>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        <ActionsMenu actions={buildReservedActions(i)} />
                       </td>
                     </tr>
                   ))}
@@ -606,38 +581,12 @@ function SetStatusModal({ item, onClose, onSaved }: { item: Item; onClose: () =>
   );
 }
 
-// Compact icon-only action button — hover shows `title` as a native tooltip.
-// Replaces the old wide text buttons (Check-out live, Media hold, Set
-// status, ...) which wrapped onto 2-3 lines per row once every row action
-// was added; icons keep the whole action toolbar on a single line.
-function IconBtn({
-  children, onClick, busy, title, danger, disabled,
-}: { children: React.ReactNode; onClick: () => void; busy?: boolean; title: string; danger?: boolean; disabled?: boolean }) {
-  const isDisabled = !!busy || !!disabled;
-  return (
-    <button
-      onClick={onClick}
-      disabled={isDisabled}
-      title={title}
-      aria-label={title}
-      style={{
-        ...btnGhost,
-        padding: "6px 9px",
-        fontSize: 14,
-        lineHeight: 1,
-        color: danger ? "var(--danger)" : undefined,
-        opacity: isDisabled ? 0.4 : 1,
-      }}
-    >
-      {busy ? "…" : children}
-    </button>
-  );
-}
-
-// Text dropdown that replaces a row of icon buttons on mobile cards — tapping
-// "Actions ▾" opens a menu listing every available action by name instead of
-// a cramped row of emoji icons. A fixed transparent backdrop behind the panel
-// closes it on outside tap (mirrors the announcement-bell dropdown pattern).
+// Text dropdown used for every row's action toolbar (both the desktop table
+// and the mobile card list) — tapping "Actions ▾" opens a menu listing every
+// available action by name instead of a row of emoji icons, which used to
+// wrap onto 2-3 lines once several actions applied to the same row. A fixed
+// transparent backdrop behind the panel closes it on outside click (mirrors
+// the announcement-bell dropdown pattern in TopBar).
 type MenuAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean; busy?: boolean };
 function ActionsMenu({ actions }: { actions: MenuAction[] }) {
   const [open, setOpen] = useState(false);
