@@ -137,6 +137,42 @@ export default function InventoryPage() {
     load();
   }
 
+  // Builds the mobile "Actions ▾" dropdown entries for a row in the Available
+  // Stock tab — same rules/handlers as the desktop icon-button toolbar above,
+  // just spelled out as text instead of emoji.
+  function buildAvailableActions(i: Item): MenuAction[] {
+    const rowBusy = busy === i.imeiSerial;
+    const out: MenuAction[] = [];
+    if (canOperate && i.status === "IN_STOCK") {
+      out.push({ label: "Check-out live", busy: rowBusy, onClick: () => act(i.imeiSerial, "CHECKOUT_LIVE") });
+      out.push({ label: "Media hold", busy: rowBusy, onClick: () => act(i.imeiSerial, "MEDIA_HOLD") });
+    }
+    if (canOperate && i.status === "CHECKED_OUT_LIVE") out.push({ label: "Check-in to shelf", busy: rowBusy, onClick: () => act(i.imeiSerial, "CHECKIN") });
+    if (canOperate && i.status === "MEDIA_HOLD") out.push({ label: "Release hold", busy: rowBusy, onClick: () => act(i.imeiSerial, "RELEASE_HOLD") });
+    if (canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status)) {
+      out.push({ label: `Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`, busy: rowBusy, onClick: () => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode)) });
+    }
+    if (canSetStatus) out.push({ label: "Set status", onClick: () => setStatusTarget(i) });
+    if (canManage) out.push({ label: "Edit details", onClick: () => setEditTarget(i) });
+    if (canManage && i.status === "IN_STOCK") {
+      out.push({ label: "Delete", danger: true, busy: rowBusy, onClick: () => { setDeleteError(""); setDeleteTarget(i); } });
+    }
+    return out;
+  }
+
+  // Same idea for the Reserved Items Board tab.
+  function buildReservedActions(i: Item): MenuAction[] {
+    const rowBusy = busy === i.imeiSerial;
+    const out: MenuAction[] = [];
+    if (canOperate && i.status === "RESERVED") out.push({ label: "Unassign / Return to shelf", busy: rowBusy, onClick: () => act(i.imeiSerial, "UNASSIGN") });
+    if (canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status)) {
+      out.push({ label: `Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`, busy: rowBusy, onClick: () => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode)) });
+    }
+    if (canSetStatus) out.push({ label: "Set status", onClick: () => setStatusTarget(i) });
+    if (canManage) out.push({ label: "Edit details", onClick: () => setEditTarget(i) });
+    return out;
+  }
+
   function toggleSelected(imei: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -318,23 +354,7 @@ export default function InventoryPage() {
                   <CardRow label="Cosmetic" value={i.cosmeticCondition || "—"} />
                   <CardRow label="Location" value={i.currentLocation} />
                   <CardActions>
-                    {canOperate && i.status === "IN_STOCK" && (
-                      <>
-                        <IconBtn title="Check-out live" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKOUT_LIVE")}>🎥</IconBtn>
-                        <IconBtn title="Media hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "MEDIA_HOLD")}>📸</IconBtn>
-                      </>
-                    )}
-                    {canOperate && i.status === "CHECKED_OUT_LIVE" && <IconBtn title="Check-in to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "CHECKIN")}>↩️</IconBtn>}
-                    {canOperate && i.status === "MEDIA_HOLD" && <IconBtn title="Release hold" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "RELEASE_HOLD")}>🔓</IconBtn>}
-                    {!canOperate && <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>}
-                    {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                      <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
-                    )}
-                    {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
-                    {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
-                    {canManage && i.status === "IN_STOCK" && (
-                      <IconBtn title="Delete" danger busy={busy === i.imeiSerial} onClick={() => { setDeleteError(""); setDeleteTarget(i); }}>🗑</IconBtn>
-                    )}
+                    <ActionsMenu actions={buildAvailableActions(i)} />
                   </CardActions>
                 </MobileCard>
               ))}
@@ -415,12 +435,7 @@ export default function InventoryPage() {
                   <CardRow label="Customer" value={i.order ? `${i.order.customerName}${i.order.customerSocialHandle ? ` (${i.order.customerSocialHandle})` : ""}` : "—"} />
                   <CardRow label="Market" value={i.order?.marketCode || "—"} />
                   <CardActions>
-                    {canOperate && i.status === "RESERVED" && <IconBtn title="Unassign / Return to shelf" busy={busy === i.imeiSerial} onClick={() => act(i.imeiSerial, "UNASSIGN")}>↩️</IconBtn>}
-                    {canOperate && WAREHOUSE_SITTING_STATUSES.includes(i.status) && (
-                      <IconBtn title={`Transfer to ${WAREHOUSE_SHORT_LABELS[otherWarehouse(i.warehouseCode)]}`} busy={busy === i.imeiSerial} onClick={() => transferOne(i.imeiSerial, otherWarehouse(i.warehouseCode))}>🔁</IconBtn>
-                    )}
-                    {canSetStatus && <IconBtn title="Set status" onClick={() => setStatusTarget(i)}>⚙️</IconBtn>}
-                    {canManage && <IconBtn title="Edit details" onClick={() => setEditTarget(i)}>✎</IconBtn>}
+                    <ActionsMenu actions={buildReservedActions(i)} />
                   </CardActions>
                 </MobileCard>
               ))}
@@ -613,6 +628,55 @@ function IconBtn({
     >
       {busy ? "…" : children}
     </button>
+  );
+}
+
+// Text dropdown that replaces a row of icon buttons on mobile cards — tapping
+// "Actions ▾" opens a menu listing every available action by name instead of
+// a cramped row of emoji icons. A fixed transparent backdrop behind the panel
+// closes it on outside tap (mirrors the announcement-bell dropdown pattern).
+type MenuAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean; busy?: boolean };
+function ActionsMenu({ actions }: { actions: MenuAction[] }) {
+  const [open, setOpen] = useState(false);
+  if (actions.length === 0) return <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>—</span>;
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ ...btnGhost, padding: "6px 12px", fontSize: 12.5, display: "flex", alignItems: "center", gap: 6 }}
+      >
+        Actions <span style={{ fontSize: 9 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 59 }} />
+          <div
+            style={{
+              position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 200,
+              background: "#fff", border: "1px solid var(--border)", borderRadius: 10,
+              boxShadow: "0 14px 34px rgba(0,0,0,0.16)", zIndex: 60, overflow: "hidden",
+            }}
+          >
+            {actions.map((a, idx) => (
+              <button
+                key={idx}
+                disabled={a.disabled || a.busy}
+                onClick={() => { setOpen(false); a.onClick(); }}
+                style={{
+                  display: "block", width: "100%", textAlign: "left", padding: "11px 14px", fontSize: 13,
+                  border: "none", borderBottom: idx < actions.length - 1 ? "1px solid var(--border)" : "none",
+                  background: "none", cursor: a.disabled || a.busy ? "not-allowed" : "pointer",
+                  color: a.danger ? "var(--danger)" : "var(--text)",
+                  opacity: a.disabled || a.busy ? 0.45 : 1,
+                }}
+              >
+                {a.busy ? "Đang xử lý…" : a.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
