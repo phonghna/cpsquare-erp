@@ -4,9 +4,11 @@ import { getSession, canAccessPage } from "@/lib/auth";
 import { randomUUID } from "crypto";
 import { WAREHOUSE_CODES } from "@/lib/warehouse";
 
-// Bulk receive: pasted CSV-like textarea, one row per line:
-//   imei,variant_id,battery_health,cosmetic_condition
-// battery_health and cosmetic_condition may be blank.
+// Bulk receive: pasted CSV-like textarea (or parsed from an uploaded Excel
+// template on the client, then flattened to the same text format), one row
+// per line:
+//   imei,variant_id,battery_health,cosmetic_condition,remark
+// battery_health, cosmetic_condition and remark may all be blank.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !canAccessPage(session.role, "inventory")) {
@@ -30,13 +32,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No data rows found." }, { status: 400 });
   }
 
-  type Row = { imei: string; variantId: string; battery: number | null; condition: string | null };
+  type Row = { imei: string; variantId: string; battery: number | null; condition: string | null; remark: string | null };
   const rows: Row[] = [];
   const errors: string[] = [];
   lines.forEach((line, idx) => {
-    const [imei, variantId, battery, condition] = line.split(",").map((p) => p.trim());
+    // Split on comma, but everything past the 4th field is treated as one
+    // remark string (rejoined) so a remark containing its own commas — e.g.
+    // "Scratch on back, customer approved" — isn't chopped into extra columns.
+    const parts = line.split(",").map((p) => p.trim());
+    const [imei, variantId, battery, condition] = parts;
+    const remark = parts.slice(4).join(",").trim();
     if (!imei || !variantId) {
-      errors.push(`Line ${idx + 1}: expected "imei,variant_id,battery_health,cosmetic_condition" — got "${line}"`);
+      errors.push(`Line ${idx + 1}: expected "imei,variant_id,battery_health,cosmetic_condition,remark" — got "${line}"`);
       return;
     }
     const batteryNum = battery ? Number(battery) : null;
@@ -44,7 +51,7 @@ export async function POST(req: NextRequest) {
       errors.push(`Line ${idx + 1}: battery_health must be a number — got "${battery}"`);
       return;
     }
-    rows.push({ imei, variantId, battery: batteryNum, condition: condition || null });
+    rows.push({ imei, variantId, battery: batteryNum, condition: condition || null, remark: remark || null });
   });
   if (rows.length === 0) {
     return NextResponse.json({ error: "No valid rows.", details: errors }, { status: 400 });
@@ -67,9 +74,9 @@ export async function POST(req: NextRequest) {
         continue;
       }
       await client.query(
-        `INSERT INTO product_items (imei_serial, variant_id, battery_health, cosmetic_condition, status, current_location, warehouse_code, updated_by_user_id)
-         VALUES ($1,$2,$3,$4,'IN_STOCK','CPSquare Warehouse (TW)',$5,$6)`,
-        [row.imei, row.variantId, row.battery, row.condition, resolvedWarehouse, session.userId]
+        `INSERT INTO product_items (imei_serial, variant_id, battery_health, cosmetic_condition, status, current_location, warehouse_code, updated_by_user_id, remark)
+         VALUES ($1,$2,$3,$4,'IN_STOCK','CPSquare Warehouse (TW)',$5,$6,$7)`,
+        [row.imei, row.variantId, row.battery, row.condition, resolvedWarehouse, session.userId, row.remark]
       );
       await client.query(
         `INSERT INTO imei_logs (log_id, imei_serial, status_from, status_to, performed_by_user_id)

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   StatusPill, STATUS_META, Card, Empty, Tabs, ModalShell, ConfirmModal, Field, inputStyle, btnPrimary, btnGhost,
   tableStyle, th, td, VariantDraftFields, VariantDraft, BRANDS, MobileCard, CardHeader, CardRow, CardActions,
 } from "@/components/ui";
 import SearchCombobox from "@/components/SearchCombobox";
 import { WAREHOUSE_CODES, WAREHOUSE_SHORT_LABELS, WAREHOUSE_SITTING_STATUSES, otherWarehouse } from "@/lib/warehouse";
+import * as XLSX from "xlsx";
 
 type Item = {
   imeiSerial: string; variantId: string; status: string; currentLocation: string;
@@ -768,12 +769,25 @@ function AddDeviceModal({ variants, onClose, onCreated }: { variants: Variant[];
   );
 }
 
+const BULK_IMPORT_HEADERS = ["IMEI", "VariantSKU", "Battery%", "Cosmetic", "Remark"];
+const BULK_IMPORT_SAMPLE_ROW = ["356938035643809", "IP14PM-256-BLK", "98", "Like new", "Customer requested extra bubble wrap"];
+
+function downloadBulkImportTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([BULK_IMPORT_HEADERS, BULK_IMPORT_SAMPLE_ROW]);
+  ws["!cols"] = [{ wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 36 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Devices");
+  XLSX.writeFile(wb, "cpsquare-bulk-import-template.xlsx");
+}
+
 function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
-  const [text, setText] = useState("356938035643809, IP14PM-256-BLK, 98, Like new");
+  const [text, setText] = useState("356938035643809, IP14PM-256-BLK, 98, Like new,");
   const [warehouseCode, setWarehouseCode] = useState("XINSHENG");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [fileName, setFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function submit() {
     setSubmitting(true);
@@ -788,15 +802,53 @@ function BulkImportModal({ onClose, onImported }: { onClose: () => void; onImpor
     setResult({ imported: data.imported, errors: data.errors || [] });
   }
 
+  // Reads the filled-in template back: every sheet row becomes one
+  // "imei, sku, battery, cosmetic, remark" line in the review textarea below,
+  // so the user can still eyeball/edit before hitting Import rows.
+  async function handleFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setFileName(file.name);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: (string | number)[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+      const dataRows = rows.filter((r, idx) => {
+        if (idx === 0 && String(r[0]).trim().toLowerCase() === "imei") return false; // skip header row
+        return r.some((cell) => String(cell ?? "").trim().length > 0);
+      });
+      if (dataRows.length === 0) {
+        setError("No data rows found in that file — fill in the template below the header row first.");
+        return;
+      }
+      const lines = dataRows.map((r) => [r[0], r[1], r[2], r[3], r[4]].map((c) => (c ?? "").toString().trim()).join(", "));
+      setText(lines.join("\n"));
+    } catch (err: any) {
+      setError("Couldn't read that file — make sure it's the .xlsx template you downloaded.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <ModalShell onClose={onClose} title="Bulk Import Devices">
-      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>One device per line: IMEI, VariantSKU, Battery%, Cosmetic — paste one row per line (simulating an Excel upload). All rows in this batch are received into the warehouse picked below.</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 }}>One device per line: IMEI, VariantSKU, Battery%, Cosmetic, Remark — paste rows directly, or download the template, fill it in Excel, and upload it back. All rows in this batch are received into the warehouse picked below.</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        <button type="button" onClick={downloadBulkImportTemplate} style={btnGhost}>⬇ Download sample Excel template</button>
+        <button type="button" onClick={() => fileInputRef.current?.click()} style={btnGhost}>⬆ Upload filled template</button>
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFilePicked} style={{ display: "none" }} />
+        {fileName && <span style={{ fontSize: 12, color: "var(--text-dim)", alignSelf: "center" }}>Loaded: {fileName}</span>}
+      </div>
       <Field label="Receiving warehouse">
         <select value={warehouseCode} onChange={(e) => setWarehouseCode(e.target.value)} style={{ ...inputStyle, maxWidth: 220, marginBottom: 10 }}>
           {WAREHOUSE_CODES.map((c) => <option key={c} value={c}>{WAREHOUSE_SHORT_LABELS[c]}</option>)}
         </select>
       </Field>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 }} />
+      <Field label="Rows to import (review before importing)">
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} style={{ ...inputStyle, resize: "vertical", fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 }} />
+      </Field>
       {error && <div style={{ color: "var(--danger)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
       {result && (
         <div style={{ fontSize: 13, marginTop: 10 }}>
